@@ -5,8 +5,8 @@ Consolidates all transformation logic into a single class.
 import logging
 import pandas as pd
 from datetime import datetime
-from weather_etl.utils.minio_client import MinIOClient
-from weather_etl.config.lake_config import (
+from src.weather_utils.minio_client import MinIOClient
+from src.weather_config.lake_config import (
     BRONZE_BUCKET, SILVER_BUCKET, 
     BRONZE_OPENMETEO_BUCKET, SILVER_OPENMETEO_BUCKET,
     SILVER_PATH_TEMPLATE

@@ -10,12 +10,12 @@ from datetime import datetime
 from abc import ABC
 
 # Import configuration and utils
-from weather_etl.config.app_config import API_KEY, CITIES
-from weather_etl.config.lake_config import (
+from src.weather_config.app_config import API_KEY, CITIES
+from src.weather_config.lake_config import (
     BRONZE_BUCKET, BRONZE_PATH_TEMPLATE,
     BRONZE_OPENMETEO_BUCKET
 )
-from weather_etl.config.openmeteo_config import (
+from src.weather_config.openmeteo_config import (
     OPENMETEO_FORECAST_URL, OPENMETEO_AIR_QUALITY_URL, 
     OPENMETEO_MARINE_URL, OPENMETEO_POLLEN_URL,
     OPENMETEO_API_KEY, 
@@ -23,9 +23,9 @@ from weather_etl.config.openmeteo_config import (
     AIR_QUALITY_PARAMS, MARINE_PARAMS, POLLEN_PARAMS,
     DEFAULT_TIMEZONE
 )
-from weather_etl.utils.city_utils import get_capitals_dataframe
-from weather_etl.utils.http_utils import get_retrying_session
-from weather_etl.utils.minio_client import MinIOClient
+from src.weather_utils.city_utils import get_capitals_dataframe
+from src.weather_utils.http_utils import get_retrying_session
+from src.weather_utils.minio_client import MinIOClient
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -73,7 +73,7 @@ class Extractor:
                 }
                 
                 self.logger.info(f"Fetching weather data for {city['name']}")
-                response = requests.get(url, params=params, timeout=10)
+                response = self.session.get(url, params=params, timeout=10)
                 response.raise_for_status()
                 raw_data = response.json()
                 

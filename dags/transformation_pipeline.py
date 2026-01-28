@@ -7,7 +7,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 
-from weather_etl.transformer import Transformer
+from src.transformer import Transformer
 
 def run_transformation(method_name, **context):
     transformer = Transformer()

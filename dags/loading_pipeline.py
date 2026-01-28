@@ -7,7 +7,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 
-from weather_etl.loader import Loader
+from src.loader import Loader
 
 def run_loading(method_name, **context):
     loader = Loader()

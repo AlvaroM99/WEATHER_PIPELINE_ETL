@@ -13,9 +13,9 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.storage_config import (
+from src.weather_config.storage_config import (
     MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_SECURE)
-from weather_etl.config.lake_config import (
+from src.weather_config.lake_config import (
     BRONZE_BUCKET, SILVER_BUCKET
 )
 

@@ -8,11 +8,11 @@ import psycopg2
 from psycopg2.extras import execute_values
 from datetime import datetime
 
-from weather_etl.config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
-from weather_etl.config.lake_config import (
+from src.weather_config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
+from src.weather_config.lake_config import (
     SILVER_OPENWEATHER_BUCKET, SILVER_PATH_TEMPLATE
 )
-from weather_etl.utils.minio_client import MinIOClient
+from src.weather_utils.minio_client import MinIOClient
 
 class Loader:
     """

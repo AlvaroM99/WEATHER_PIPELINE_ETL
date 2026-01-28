@@ -7,7 +7,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 
-from weather_etl.extractor import Extractor
+from src.extractor import Extractor
 
 def run_extraction(method_name, **context):
     extractor = Extractor()

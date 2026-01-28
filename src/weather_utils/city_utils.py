@@ -9,7 +9,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from weather_etl.config.app_config import CITIES
+from src.weather_config.app_config import CITIES
 
 
 def get_capitals_dataframe():

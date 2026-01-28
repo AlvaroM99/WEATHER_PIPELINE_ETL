@@ -259,8 +259,11 @@ OPENWEATHER_API_KEY=78c48c7a080848cb36d4e2e6cd9f6170
 WEATHER_PIPELINE_ETL/
 ├── dags/
 │   └── weather_etl_dag.py      # DAG de Airflow con lógica ETL
-├── postgres/
-│   └── init.sql                # Script de inicialización de DB
+├── docker/
+│   ├── postgres/
+│       ├── init.sql            # Script de inicialización de DB
+│       ├── init-dimensional-tables.sql
+│       └── init-fact-tables.sql
 ├── docker-compose.yml          # Configuración de servicios Docker
 ├── .env                        # Variables de entorno (NO subir a Git)
 ├── .env.example                # Template de variables de entorno
