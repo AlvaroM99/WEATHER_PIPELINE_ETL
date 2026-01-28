@@ -50,7 +50,7 @@ def get_coastal_cities():
                 "name": row['municipio_nombre'],
                 "lat": row['latitude'],
                 "lon": row['longitude'],
-                "code": row['city_code']  # Now matches dim_city (e.g. '00002')
+                "code": row['city_code']
             })
             
     return coastal_cities
