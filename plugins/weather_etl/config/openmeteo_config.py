@@ -13,6 +13,7 @@ OPENMETEO_API_KEY = os.getenv("OPENMETEO_API_KEY")
 # Base URLs for different Open-Meteo services
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPENMETEO_AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+OPENMETEO_POLLEN_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 OPENMETEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Default timezone for requests

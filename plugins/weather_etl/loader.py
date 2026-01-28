@@ -321,6 +321,14 @@ class Loader:
             latest_file = sorted(parquet_files)[-1]
             df = self.minio_client.read_parquet(bucket, latest_file)
             
+            # Deduplicate data to avoid PK violations (if multiple bronze files were aggregated)
+            # We assume unique combination of city_code and time is expected per file
+            if 'city_code' in df.columns and 'time' in df.columns:
+                initial_count = len(df)
+                df.drop_duplicates(subset=['city_code', 'time'], inplace=True)
+                if len(df) < initial_count:
+                    self.logger.warning(f"Attributes dropped {initial_count - len(df)} duplicate rows")
+
             records = []
             for _, row in df.iterrows():
                 city_id = code_map.get(row.get('city_code'))
