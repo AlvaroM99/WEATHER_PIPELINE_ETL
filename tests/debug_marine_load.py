@@ -16,14 +16,15 @@ if weather_etl_path not in sys.path:
     sys.path.insert(0, weather_etl_path)
 
 # Hardcode credentials to bypass encoding/env issues
-os.environ['POSTGRES_USER'] = 'weatheruser'
-os.environ['POSTGRES_PASSWORD'] = 'Weather2024!Secure'
-os.environ['POSTGRES_DB'] = 'weatherdb'
-os.environ['POSTGRES_HOST'] = 'localhost'
+# UPDATED: Use env vars or defaults, but DO NOT commit secrets
+os.environ['POSTGRES_USER'] = os.getenv('POSTGRES_USER', 'weatheruser')
+os.environ['POSTGRES_PASSWORD'] = os.getenv('POSTGRES_PASSWORD', 'weather_password_placeholder')
+os.environ['POSTGRES_DB'] = os.getenv('POSTGRES_DB', 'weatherdb')
+os.environ['POSTGRES_HOST'] = os.getenv('POSTGRES_HOST', 'localhost')
 
-os.environ['MINIO_ENDPOINT'] = 'localhost:9000'
-os.environ['MINIO_ACCESS_KEY'] = 'minioadmin'
-os.environ['MINIO_SECRET_KEY'] = 'MinIO2024!Secure'
+os.environ['MINIO_ENDPOINT'] = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
+os.environ['MINIO_ACCESS_KEY'] = os.getenv('MINIO_ROOT_USER', 'minioadmin')
+os.environ['MINIO_SECRET_KEY'] = os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_placeholder')
 os.environ['MINIO_SECURE'] = 'False'
 
 # Setup logging
@@ -33,15 +34,15 @@ logger = logging.getLogger("DebugMarine")
 try:
     # Overwrite config manually just in case
     import weather_etl.config.app_config
-    weather_etl.config.app_config.POSTGRES_HOST = 'localhost'
-    weather_etl.config.app_config.POSTGRES_USER = 'weatheruser'
-    weather_etl.config.app_config.POSTGRES_PASSWORD = 'Weather2024!Secure'
-    weather_etl.config.app_config.POSTGRES_DB = 'weatherdb'
+    weather_etl.config.app_config.POSTGRES_HOST = os.environ['POSTGRES_HOST']
+    weather_etl.config.app_config.POSTGRES_USER = os.environ['POSTGRES_USER']
+    weather_etl.config.app_config.POSTGRES_PASSWORD = os.environ['POSTGRES_PASSWORD']
+    weather_etl.config.app_config.POSTGRES_DB = os.environ['POSTGRES_DB']
 
     import config.storage_config
-    config.storage_config.MINIO_ENDPOINT = 'localhost:9000'
-    config.storage_config.MINIO_ACCESS_KEY = 'minioadmin'
-    config.storage_config.MINIO_SECRET_KEY = 'MinIO2024!Secure'
+    config.storage_config.MINIO_ENDPOINT = os.environ['MINIO_ENDPOINT']
+    config.storage_config.MINIO_ACCESS_KEY = os.environ['MINIO_ACCESS_KEY']
+    config.storage_config.MINIO_SECRET_KEY = os.environ['MINIO_SECRET_KEY']
     
     from weather_etl.loader import Loader
     from weather_etl.utils.minio_client import MinIOClient

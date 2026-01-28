@@ -8,7 +8,7 @@ __pycache__/
 !.env.example
 
 # Docker
-docker-compose.yml
+
 
 
 # Docker volumes
