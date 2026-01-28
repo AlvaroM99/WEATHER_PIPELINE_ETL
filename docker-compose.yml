@@ -1,0 +1,114 @@
+services:
+  # PostgreSQL Database for storing weather data
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgres/init-metabase-db.sh:/docker-entrypoint-initdb.d/init-metabase-db.sh
+    ports:
+      - "5432:5432"
+    networks:
+      - airflow_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin for visual management of PostgreSQL
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - airflow_net
+
+  # Apache Airflow for scheduling and ETL logic
+  airflow:
+    image: apache/airflow:2.9.1-python3.11
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__WEBSERVER__DEFAULT_USER_USERNAME: ${AIRFLOW_USER}
+      AIRFLOW__WEBSERVER__DEFAULT_USER_PASSWORD: ${AIRFLOW_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./airflow-init.sh:/opt/airflow/airflow-init.sh
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    command: bash /opt/airflow/airflow-init.sh
+    networks:
+      - airflow_net
+
+  # Metabase for dashboard and visualization
+  metabase:
+    image: metabase/metabase
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - airflow_net
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_db
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+
+  # MinIO as Data Lake (Bronze & Silver Layers)
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"  # MinIO API
+      - "9001:9001"  # MinIO Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - airflow_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+# Define named volumes for persistence
+volumes:
+  postgres_data:
+  airflow_logs:
+  minio_data:
+
+# Define shared Docker network
+networks:
+  airflow_net:

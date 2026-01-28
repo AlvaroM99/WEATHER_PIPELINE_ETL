@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Docker volumes
+postgres_data/
+airflow_logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Airflow
+airflow.db
+airflow.cfg
+webserver_config.py
+standalone_admin_password.txt
+
+# Python virtual environment
+venv/
+env/
+ENV/

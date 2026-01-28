@@ -1,0 +1,7 @@
+requests
+psycopg2-binary
+pandas
+pyarrow
+minio
+python-dotenv
+urllib3
