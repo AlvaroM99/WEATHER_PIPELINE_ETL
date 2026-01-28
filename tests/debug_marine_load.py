@@ -5,24 +5,33 @@ import logging
 import pandas as pd
 from datetime import datetime
 
-# Add plugins to path
-plugin_path = os.path.abspath('plugins')
-if plugin_path not in sys.path:
-    sys.path.insert(0, plugin_path)
+# Add project root to path
+# Assuming the script is run from project root or tests/
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Add weather_etl to path so 'config' module can be found as 'config' (matching likely minio_client behavior)
-weather_etl_path = os.path.join(plugin_path, 'weather_etl')
-if weather_etl_path not in sys.path:
-    sys.path.insert(0, weather_etl_path)
+# Hardcode credentials to bypass encoding/env issues
+# Load .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Loaded .env file")
+except ImportError:
+    print("python-dotenv not installed, relying on existing env vars")
 
 # Hardcode credentials to bypass encoding/env issues
 # UPDATED: Use env vars or defaults, but DO NOT commit secrets
 os.environ['POSTGRES_USER'] = os.getenv('POSTGRES_USER', 'weatheruser')
 os.environ['POSTGRES_PASSWORD'] = os.getenv('POSTGRES_PASSWORD', 'weather_password_placeholder')
 os.environ['POSTGRES_DB'] = os.getenv('POSTGRES_DB', 'weatherdb')
-os.environ['POSTGRES_HOST'] = os.getenv('POSTGRES_HOST', 'localhost')
+# Force localhost for local debugging, even if .env says 'postgres'
+os.environ['POSTGRES_HOST'] = 'localhost'
 
 os.environ['MINIO_ENDPOINT'] = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
+if os.environ['MINIO_ENDPOINT'].startswith('minio:'):
+     os.environ['MINIO_ENDPOINT'] = 'localhost:9000'
+     
 os.environ['MINIO_ACCESS_KEY'] = os.getenv('MINIO_ROOT_USER', 'minioadmin')
 os.environ['MINIO_SECRET_KEY'] = os.getenv('MINIO_ROOT_PASSWORD', 'minio_password_placeholder')
 os.environ['MINIO_SECURE'] = 'False'
@@ -32,20 +41,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("DebugMarine")
 
 try:
-    # Overwrite config manually just in case
-    import weather_etl.config.app_config
-    weather_etl.config.app_config.POSTGRES_HOST = os.environ['POSTGRES_HOST']
-    weather_etl.config.app_config.POSTGRES_USER = os.environ['POSTGRES_USER']
-    weather_etl.config.app_config.POSTGRES_PASSWORD = os.environ['POSTGRES_PASSWORD']
-    weather_etl.config.app_config.POSTGRES_DB = os.environ['POSTGRES_DB']
-
-    import config.storage_config
-    config.storage_config.MINIO_ENDPOINT = os.environ['MINIO_ENDPOINT']
-    config.storage_config.MINIO_ACCESS_KEY = os.environ['MINIO_ACCESS_KEY']
-    config.storage_config.MINIO_SECRET_KEY = os.environ['MINIO_SECRET_KEY']
+    import src.weather_config.app_config
+    src.weather_config.app_config.POSTGRES_HOST = os.environ['POSTGRES_HOST']
+    src.weather_config.app_config.POSTGRES_USER = os.environ['POSTGRES_USER']
+    src.weather_config.app_config.POSTGRES_PASSWORD = os.environ['POSTGRES_PASSWORD']
+    src.weather_config.app_config.POSTGRES_DB = os.environ['POSTGRES_DB']
     
-    from weather_etl.loader import Loader
-    from weather_etl.utils.minio_client import MinIOClient
+    print(f"DEBUG: Host={src.weather_config.app_config.POSTGRES_HOST}")
+    # print(f"DEBUG: User={src.weather_config.app_config.POSTGRES_USER}")
+    # print(f"DEBUG: DB={src.weather_config.app_config.POSTGRES_DB}")
+
+    # lake_config uses os.getenv directly usually
+
+    # lake_config uses os.getenv directly usually
+    import src.weather_config.lake_config as lake_config
+    
+    from src.loader import Loader
+    from src.weather_utils.minio_client import MinIOClient
 
 except ImportError as e:
     print(f"CRITICAL: Import failed: {e}")
@@ -71,8 +83,8 @@ def main():
         # Loader.__init__ creates self.minio_client. 
         # But if MinIOClient uses global var from config, and config was imported/set correctly, it should be fine.
         
-        print(f"MinIO Endpoint in config: {config.storage_config.MINIO_ENDPOINT}")
-        print(f"Postgres Host in config: {weather_etl.config.app_config.POSTGRES_HOST}")
+        # print(f"MinIO Endpoint in config: {config.storage_config.MINIO_ENDPOINT}")
+        print(f"Postgres Host in config: {src.weather_config.app_config.POSTGRES_HOST}")
 
         print("Attempting to load marine data...")
         # Calls load_fact_marine
@@ -81,7 +93,13 @@ def main():
         
     except Exception as e:
         logger.exception("Failed to load marine data")
-        print(f"\nFAILURE: {e}")
+        try:
+            with open("error.log", "w", encoding="utf-8") as f:
+                import traceback
+                f.write(traceback.format_exc())
+            print("Error written to error.log")
+        except:
+            print("Failed to write error log")
 
 if __name__ == "__main__":
     main()

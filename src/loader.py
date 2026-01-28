@@ -305,7 +305,7 @@ class Loader:
         conn = self.get_db_connection()
         
         try:
-            _, code_map = self.get_city_id_mapping(conn)
+            name_map, _ = self.get_city_id_mapping(conn)
             silver_path = prefix_template.format(execution_date=execution_date)
             
             try:
@@ -321,18 +321,24 @@ class Loader:
             latest_file = sorted(parquet_files)[-1]
             df = self.minio_client.read_parquet(bucket, latest_file)
             
-            # Deduplicate data to avoid PK violations (if multiple bronze files were aggregated)
-            # We assume unique combination of city_code and time is expected per file
-            if 'city_code' in df.columns and 'time' in df.columns:
+            # Deduplicate data to avoid PK violations
+            if 'city_name' in df.columns and 'time' in df.columns:
                 initial_count = len(df)
-                df.drop_duplicates(subset=['city_code', 'time'], inplace=True)
+                df.drop_duplicates(subset=['city_name', 'time'], inplace=True)
                 if len(df) < initial_count:
-                    self.logger.warning(f"Attributes dropped {initial_count - len(df)} duplicate rows")
+                    self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
 
             records = []
             for _, row in df.iterrows():
-                city_id = code_map.get(row.get('city_code'))
-                if not city_id: continue
+                city_id = name_map.get(row.get('city_name'))
+                if not city_id: 
+                    # Try fallback to city column if city_name missing (common in some dfs)
+                    city_id = name_map.get(row.get('city'))
+                
+                if not city_id:
+                    self.logger.warning(f"City not found for row: {row.get('city_name') or row.get('city')}")
+                    continue
+                    
                 records.append(mapper(row, city_id, extraction_date_id))
             
             if not records: return 0
