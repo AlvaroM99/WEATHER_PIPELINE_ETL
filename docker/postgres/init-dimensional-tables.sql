@@ -11,10 +11,11 @@ CREATE SCHEMA IF NOT EXISTS dwh;
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS dwh.dim_city (
     city_id SERIAL PRIMARY KEY,
-    city_name VARCHAR(100) NOT NULL UNIQUE,
+    city_code VARCHAR(10) NOT NULL UNIQUE,
+    city_name VARCHAR(100) NOT NULL,
     latitude DECIMAL(9,6),
     longitude DECIMAL(9,6),
-    population INTEGER,
+    country_code VARCHAR(2) NOT NULL DEFAULT 'ES',
     is_coastal INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -129,6 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_dim_date_month ON dwh.dim_date(id_calendar_month)
 CREATE INDEX IF NOT EXISTS idx_dim_date_week ON dwh.dim_date(id_calendar_week);
 
 -- dim_city indexes
+CREATE INDEX IF NOT EXISTS idx_dim_city_code ON dwh.dim_city(city_code);
 CREATE INDEX IF NOT EXISTS idx_dim_city_name ON dwh.dim_city(city_name);
 
 -- dim_week indexes

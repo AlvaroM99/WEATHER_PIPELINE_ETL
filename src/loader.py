@@ -61,6 +61,12 @@ class Loader:
         except ValueError:
             return None
 
+    def clean_value(self, value):
+        """Convert NaN/NaT to None for database insertion"""
+        if pd.isna(value):
+            return None
+        return value
+
     # ========================================================================
     # Fact Observation Load
     # ========================================================================
@@ -85,17 +91,23 @@ class Loader:
             for _, row in df.iterrows():
                 city_id = name_map.get(row.get('city'))
                 if not city_id: continue
-                
-                obs_timestamp = pd.to_datetime(row.get('dt'), unit='s') if 'dt' in row else datetime.now()
-                
+
+                # Handle timestamp - use date if dt not available
+                obs_timestamp = pd.to_datetime(row.get('dt'), unit='s') if 'dt' in row and pd.notna(row.get('dt')) else datetime.now()
+
+                # Clean all values to convert NaN to None
                 records.append((
                     city_id, date_id, obs_timestamp,
-                    row.get('temp'), row.get('feels_like'), row.get('temp_min'), row.get('temp_max'),
-                    row.get('pressure'), row.get('humidity'), row.get('visibility'),
-                    row.get('wind_speed'), row.get('wind_deg'), row.get('wind_gust'),
-                    row.get('clouds'), row.get('weather_id'), row.get('weather_main'), 
-                    row.get('weather_description'),
-                    row.get('rain_1h'), row.get('rain_3h'), row.get('snow_1h'), row.get('snow_3h')
+                    self.clean_value(row.get('temperature')), self.clean_value(row.get('feels_like')),
+                    self.clean_value(row.get('temp_min')), self.clean_value(row.get('temp_max')),
+                    self.clean_value(row.get('pressure')), self.clean_value(row.get('humidity')),
+                    self.clean_value(row.get('visibility')),
+                    self.clean_value(row.get('wind_speed')), self.clean_value(row.get('wind_deg')),
+                    self.clean_value(row.get('wind_gust')),
+                    self.clean_value(row.get('clouds')), self.clean_value(row.get('weather_id')),
+                    row.get('weather_main'), row.get('weather_description'),
+                    self.clean_value(row.get('rain_1h')), self.clean_value(row.get('rain_3h')),
+                    self.clean_value(row.get('snow_1h')), self.clean_value(row.get('snow_3h'))
                 ))
 
             if not records: return 0

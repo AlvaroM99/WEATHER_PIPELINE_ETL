@@ -10,20 +10,20 @@ from datetime import datetime
 from abc import ABC
 
 # Import configuration and utils
-from src.weather_config.app_config import API_KEY, CITIES
+from src.weather_config.app_config import API_KEY
 from src.weather_config.lake_config import (
     BRONZE_BUCKET, BRONZE_PATH_TEMPLATE,
     BRONZE_OPENMETEO_BUCKET
 )
 from src.weather_config.openmeteo_config import (
-    OPENMETEO_FORECAST_URL, OPENMETEO_AIR_QUALITY_URL, 
+    OPENMETEO_FORECAST_URL, OPENMETEO_AIR_QUALITY_URL,
     OPENMETEO_MARINE_URL, OPENMETEO_POLLEN_URL,
-    OPENMETEO_API_KEY, 
+    OPENMETEO_API_KEY,
     DAILY_FORECAST_PARAMS, HOURLY_FORECAST_PARAMS,
     AIR_QUALITY_PARAMS, MARINE_PARAMS, POLLEN_PARAMS,
     DEFAULT_TIMEZONE
 )
-from src.weather_utils.city_utils import get_capitals_dataframe
+from src.weather_utils.city_utils import get_capitals_dataframe, get_cities
 from src.weather_utils.http_utils import get_retrying_session
 from src.weather_utils.minio_client import MinIOClient
 
@@ -58,13 +58,15 @@ class Extractor:
 
     def extract_openweather(self, **context):
         """Extract current weather from OpenWeatherMap"""
-        self.log_start(f"OpenWeatherMap extraction for {len(CITIES)} cities")
-        
+        # Load cities from GitHub CSV
+        cities = get_cities()
+        self.log_start(f"OpenWeatherMap extraction for {len(cities)} cities")
+
         execution_date = context.get('ds', datetime.now().strftime('%Y-%m-%d'))
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         uploaded_objects = []
-        
-        for city in CITIES:
+
+        for city in cities:
             try:
                 url = "https://api.openweathermap.org/data/2.5/weather"
                 params = {

@@ -2,8 +2,14 @@
 
 import logging
 import psycopg2
+import requests
+import pandas as pd
 from datetime import date, timedelta
+from io import StringIO
 from src.weather_config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
+
+# GitHub URL for raw_cities.csv
+CITIES_CSV_URL = "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
 
 class DimensionalLoader:
     """
@@ -77,32 +83,54 @@ class DimensionalLoader:
             conn.close()
 
     def load_dim_city(self):
-        """Loads Spanish capitals into dim_city"""
-        self.log_start("Loading dim_city...")
+        """Loads Spanish capitals from GitHub CSV into dim_city"""
+        self.log_start("Loading dim_city from GitHub CSV...")
         conn = self.get_db_connection()
         cur = conn.cursor()
 
-        cities = [
-            ('MAD', 'Madrid', 40.4168, -3.7038),
-            ('BCN', 'Barcelona', 41.3851, 2.1734),
-            ('VLC', 'Valencia', 39.4699, -0.3763),
-            ('SEV', 'Sevilla', 37.3891, -5.9845),
-            ('BIO', 'Bilbao', 43.2630, -2.9350)
-        ]
-
         try:
-            for code, name, lat, lon in cities:
+            # Download CSV from GitHub
+            self.logger.info(f"📥 Downloading cities CSV from GitHub...")
+            response = requests.get(CITIES_CSV_URL, timeout=10)
+            response.raise_for_status()
+
+            # Parse CSV
+            csv_data = StringIO(response.text)
+            df = pd.read_csv(csv_data, sep=',')  # CSV format with commas
+
+            # Validate required columns
+            required_cols = ['city_code', 'city_name', 'latitud', 'longitud', 'country_code', 'is_coastal']
+            if not all(col in df.columns for col in required_cols):
+                raise ValueError(f"CSV missing required columns. Expected: {required_cols}, Got: {df.columns.tolist()}")
+
+            self.logger.info(f"✅ Successfully downloaded {len(df)} cities from GitHub")
+
+            # Insert each city into database
+            for _, row in df.iterrows():
                 cur.execute("""
-                    INSERT INTO dwh.dim_city (city_code, city_name, latitude, longitude, country_code)
-                    VALUES (%s, %s, %s, %s, 'ES')
-                    ON CONFLICT (city_code) DO UPDATE 
+                    INSERT INTO dwh.dim_city (city_code, city_name, latitude, longitude, country_code, is_coastal)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (city_code) DO UPDATE
                     SET city_name = EXCLUDED.city_name,
                         latitude = EXCLUDED.latitude,
-                        longitude = EXCLUDED.longitude;
-                """, (code, name, lat, lon))
-            
+                        longitude = EXCLUDED.longitude,
+                        country_code = EXCLUDED.country_code,
+                        is_coastal = EXCLUDED.is_coastal;
+                """, (
+                    row['city_code'],
+                    row['city_name'],
+                    row['latitud'],
+                    row['longitud'],
+                    row['country_code'],
+                    row['is_coastal']
+                ))
+
             conn.commit()
-            self.log_end("dim_city loaded successfully.")
+            self.log_end(f"dim_city loaded successfully with {len(df)} cities.")
+        except requests.RequestException as e:
+            conn.rollback()
+            self.log_error(f"Error downloading cities CSV from GitHub", e)
+            raise
         except Exception as e:
             conn.rollback()
             self.log_error(f"Error loading dim_city", e)
