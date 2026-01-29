@@ -9,7 +9,8 @@ Type-annotated module for loading data into the data warehouse (Silver → Gold)
 from __future__ import annotations
 
 import logging
-from datetime import datetime, time as dt_time
+from datetime import datetime
+from datetime import time as dt_time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
