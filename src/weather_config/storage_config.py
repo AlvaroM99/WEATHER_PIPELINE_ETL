@@ -8,7 +8,10 @@ Airflow Connections when available, with fallback to environment variables.
 
 import os
 
-from weather_config.secrets_manager import get_minio_credentials
+try:
+    from src.weather_config.secrets_manager import get_minio_credentials
+except ImportError:
+    from weather_config.secrets_manager import get_minio_credentials
 
 # MinIO credentials via SecretsManager
 _minio_creds = None

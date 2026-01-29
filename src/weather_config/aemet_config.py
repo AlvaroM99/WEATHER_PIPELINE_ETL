@@ -8,7 +8,10 @@ Airflow Connections when available, with fallback to environment variables.
 
 import os
 
-from weather_config.secrets_manager import get_aemet_api_key
+try:
+    from src.weather_config.secrets_manager import get_aemet_api_key
+except ImportError:
+    from weather_config.secrets_manager import get_aemet_api_key
 
 # API Key (via SecretsManager)
 _api_key = None

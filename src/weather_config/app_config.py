@@ -9,10 +9,16 @@ Airflow Connections when available, with fallback to environment variables.
 import os
 from typing import Optional
 
-from weather_config.secrets_manager import (
-    get_openweather_api_key,
-    get_postgres_credentials,
-)
+try:
+    from src.weather_config.secrets_manager import (
+        get_openweather_api_key,
+        get_postgres_credentials,
+    )
+except ImportError:
+    from weather_config.secrets_manager import (
+        get_openweather_api_key,
+        get_postgres_credentials,
+    )
 
 # OpenWeatherMap API Key (via SecretsManager)
 _api_key: Optional[str] = None
