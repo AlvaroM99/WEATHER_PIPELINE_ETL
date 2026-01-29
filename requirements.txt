@@ -5,3 +5,4 @@ pyarrow
 minio
 python-dotenv
 urllib3
+great_expectations>=0.18.0
