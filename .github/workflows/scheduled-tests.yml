@@ -1,0 +1,319 @@
+name: Scheduled Tests
+
+on:
+  schedule:
+    # Run every day at 2:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      run_slow_tests:
+        description: 'Run slow/long-running tests'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  nightly-tests:
+    name: Nightly Full Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: weather_user
+          POSTGRES_PASSWORD: weather_pass
+          POSTGRES_DB: weather_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: --health-cmd "curl -f http://localhost:9000/minio/health/live" --health-interval 10s --health-timeout 5s --health-retries 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install all dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run full test suite
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: weather_user
+          POSTGRES_PASSWORD: weather_pass
+          POSTGRES_DB: weather_db
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+
+      - name: Run slow tests
+        if: github.event.inputs.run_slow_tests == 'true'
+        run: |
+          pytest tests/ -v -m "slow" --no-cov
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: weather_user
+          POSTGRES_PASSWORD: weather_pass
+          POSTGRES_DB: weather_db
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: nightly
+          name: codecov-nightly
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Archive coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+
+  dependency-check:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pip-audit safety
+
+      - name: Check for security vulnerabilities
+        run: |
+          pip-audit || true
+
+      - name: Check outdated packages
+        run: |
+          pip list --outdated --format=columns || true
+
+  data-quality-full:
+    name: Full Data Quality Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run comprehensive data quality checks
+        run: |
+          python << 'EOF'
+          import pandas as pd
+          import json
+          from datetime import datetime
+
+          from src.data_quality.validators import DataQualityValidator
+          from src.data_quality.metrics import DataQualityMetrics
+          from src.data_quality.expectations import (
+              WEATHER_OBSERVATION_CONFIG,
+              DAILY_FORECAST_CONFIG,
+              HOURLY_FORECAST_CONFIG,
+              AIR_QUALITY_CONFIG,
+              POLLEN_CONFIG,
+              MARINE_CONFIG
+          )
+
+          # Test all configurations with sample data
+          configs = {
+              'WEATHER_OBSERVATION': (WEATHER_OBSERVATION_CONFIG, {
+                  'city': ['Madrid', 'Barcelona', 'Valencia'],
+                  'temperature': [25.0, 22.0, 28.0],
+                  'humidity': [45, 60, 55],
+                  'pressure': [1013.0, 1015.0, 1010.0],
+                  'wind_speed': [5.0, 8.0, 3.0],
+                  'timestamp': pd.to_datetime(['2024-01-01', '2024-01-01', '2024-01-01'])
+              }),
+              'DAILY_FORECAST': (DAILY_FORECAST_CONFIG, {
+                  'city': ['Madrid', 'Barcelona'],
+                  'date': pd.to_datetime(['2024-01-01', '2024-01-02']),
+                  'temperature_max': [28.0, 25.0],
+                  'temperature_min': [15.0, 12.0],
+                  'precipitation': [0.0, 5.0]
+              }),
+              'HOURLY_FORECAST': (HOURLY_FORECAST_CONFIG, {
+                  'city': ['Madrid'],
+                  'datetime': pd.to_datetime(['2024-01-01 10:00']),
+                  'temperature': [22.0],
+                  'humidity': [50]
+              }),
+              'AIR_QUALITY': (AIR_QUALITY_CONFIG, {
+                  'city': ['Madrid', 'Barcelona'],
+                  'pm10': [25.0, 30.0],
+                  'pm2_5': [15.0, 18.0]
+              }),
+              'POLLEN': (POLLEN_CONFIG, {
+                  'city': ['Madrid'],
+                  'grass_pollen': [50]
+              }),
+              'MARINE': (MARINE_CONFIG, {
+                  'location': ['Bilbao'],
+                  'wave_height': [1.5],
+                  'wave_period': [8.0]
+              })
+          }
+
+          results = {}
+          metrics_calc = DataQualityMetrics()
+
+          print("=" * 60)
+          print("NIGHTLY DATA QUALITY VALIDATION REPORT")
+          print(f"Run Time: {datetime.now().isoformat()}")
+          print("=" * 60)
+
+          for name, (config, sample_data) in configs.items():
+              print(f"\n{name}:")
+              print("-" * 40)
+
+              try:
+                  df = pd.DataFrame(sample_data)
+                  validator = DataQualityValidator(config)
+
+                  validation_result = validator.run_validation(df)
+                  completeness = metrics_calc.calculate_completeness(df)
+
+                  results[name] = {
+                      'validation_passed': validation_result.get('passed', False),
+                      'completeness': completeness,
+                      'row_count': len(df)
+                  }
+
+                  status = "PASS" if validation_result.get('passed', False) else "WARN"
+                  print(f"  Status: {status}")
+                  print(f"  Rows: {len(df)}")
+                  print(f"  Completeness: {completeness}")
+
+              except Exception as e:
+                  results[name] = {'error': str(e)}
+                  print(f"  Status: ERROR - {e}")
+
+          print("\n" + "=" * 60)
+          print("SUMMARY")
+          print("=" * 60)
+
+          passed = sum(1 for r in results.values() if r.get('validation_passed', False))
+          total = len(results)
+          print(f"Validations Passed: {passed}/{total}")
+
+          # Save results
+          with open('data_quality_report.json', 'w') as f:
+              json.dump(results, f, indent=2, default=str)
+
+          print("\nReport saved to: data_quality_report.json")
+          EOF
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-quality-report
+          path: data_quality_report.json
+          retention-days: 30
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [nightly-tests, dependency-check, data-quality-full]
+    if: failure()
+
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Nightly build failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Nightly Build Failure Report
+
+            The scheduled nightly build has failed. Please investigate.
+
+            **Run URL:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            **Failed Jobs:**
+            - Nightly Tests: ${{ needs.nightly-tests.result }}
+            - Dependency Check: ${{ needs.dependency-check.result }}
+            - Data Quality: ${{ needs.data-quality-full.result }}
+
+            ---
+            *This issue was automatically created by GitHub Actions*
+            `;
+
+            // Check if similar issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure'
+            });
+
+            const existingIssue = issues.data.find(issue =>
+              issue.title.includes('Nightly build failed')
+            );
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: body
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['ci-failure', 'automated']
+              });
+            }

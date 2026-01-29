@@ -1,0 +1,216 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [master, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  pr-check:
+    name: PR Quality Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install black flake8 isort
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v42
+        with:
+          files: |
+            **/*.py
+
+      - name: Check formatting on changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          echo "Changed Python files:"
+          echo "${{ steps.changed-files.outputs.all_changed_files }}"
+          black --check --diff ${{ steps.changed-files.outputs.all_changed_files }}
+        continue-on-error: true
+
+      - name: Check imports on changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          isort --check-only --diff ${{ steps.changed-files.outputs.all_changed_files }}
+        continue-on-error: true
+
+      - name: Lint changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          flake8 ${{ steps.changed-files.outputs.all_changed_files }} --count --statistics
+        continue-on-error: true
+
+  test-changes:
+    name: Test Changed Code
+    runs-on: ubuntu-latest
+    needs: pr-check
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: weather_user
+          POSTGRES_PASSWORD: weather_pass
+          POSTGRES_DB: weather_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing -m "not database and not slow"
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: weather_user
+          POSTGRES_PASSWORD: weather_pass
+          POSTGRES_DB: weather_db
+
+      - name: Coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: pr-tests
+          name: codecov-pr
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit security scan
+        run: |
+          bandit -r src/ -ll --skip B101,B311 -f json -o bandit-report.json || true
+          bandit -r src/ -ll --skip B101,B311
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          pip install -r requirements.txt
+          safety check --full-report || true
+        continue-on-error: true
+
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [pr-check, test-changes, security-scan]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate PR Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prCheckResult = '${{ needs.pr-check.result }}';
+            const testResult = '${{ needs.test-changes.result }}';
+            const securityResult = '${{ needs.security-scan.result }}';
+
+            const statusEmoji = (status) => {
+              switch(status) {
+                case 'success': return ':white_check_mark:';
+                case 'failure': return ':x:';
+                case 'skipped': return ':fast_forward:';
+                default: return ':warning:';
+              }
+            };
+
+            const body = `## PR Validation Summary
+
+            | Check | Status |
+            |-------|--------|
+            | Code Quality | ${statusEmoji(prCheckResult)} ${prCheckResult} |
+            | Tests | ${statusEmoji(testResult)} ${testResult} |
+            | Security | ${statusEmoji(securityResult)} ${securityResult} |
+
+            ---
+            *Automated validation by GitHub Actions*
+            `;
+
+            // Only comment on PR if this is a pull request
+            if (context.payload.pull_request) {
+              // Check for existing bot comment
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+              });
+
+              const botComment = comments.data.find(comment =>
+                comment.user.type === 'Bot' && comment.body.includes('PR Validation Summary')
+              );
+
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: body
+                });
+              }
+            }

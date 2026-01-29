@@ -1,0 +1,75 @@
+# Dependabot configuration for Weather Pipeline ETL
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "AlvaroM99"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      # Group minor and patch updates together
+      python-minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Security updates separately for visibility
+      python-security:
+        applies-to: security-updates
+    ignore:
+      # Ignore major version updates for stability-critical packages
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "psycopg2-binary"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "AlvaroM99"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions-updates:
+        patterns:
+          - "*"
+
+  # Docker dependencies (if using Dockerfile)
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    reviewers:
+      - "AlvaroM99"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"
