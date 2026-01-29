@@ -40,3 +40,4 @@ standalone_admin_password.txt
 venv/
 env/
 ENV/
+.coverage

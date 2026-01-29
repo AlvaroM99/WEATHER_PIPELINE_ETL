@@ -1,0 +1,6 @@
+city_code,city_name,latitud,longitud,country_code,is_coastal
+28079,Madrid,40.4168,-3.7038,ES,0
+08019,Barcelona,41.3851,2.1734,ES,1
+41091,Sevilla,37.3886,-5.9823,ES,0
+29067,Málaga,36.7213,-4.4214,ES,1
+46250,Valencia,39.4699,-0.3763,ES,1

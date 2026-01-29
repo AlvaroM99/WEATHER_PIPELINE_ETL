@@ -1,0 +1,20 @@
+# Testing Framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Mocking Libraries
+responses==0.24.1
+faker==21.0.0
+
+# Code Quality
+coverage==7.3.3
+
+# Existing dependencies (from requirements.txt)
+requests
+psycopg2-binary
+pandas
+pyarrow
+minio
+python-dotenv
+urllib3
