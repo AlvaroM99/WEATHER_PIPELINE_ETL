@@ -15,7 +15,7 @@ try:
         get_postgres_credentials,
     )
 except ImportError:
-    from weather_config.secrets_manager import (
+    from weather_config.secrets_manager import (  # type: ignore[no-redef]
         get_openweather_api_key,
         get_postgres_credentials,
     )

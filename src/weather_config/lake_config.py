@@ -12,7 +12,7 @@ import os
 try:
     from src.weather_config.secrets_manager import get_minio_credentials
 except ImportError:
-    from weather_config.secrets_manager import get_minio_credentials
+    from weather_config.secrets_manager import get_minio_credentials  # type: ignore[no-redef]
 
 # MinIO credentials via SecretsManager
 _minio_creds = None

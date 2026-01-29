@@ -1,14 +1,19 @@
 """
 MinIO Client Utilities
-Handles connection and operations with MinIO data lake
+
+Type-annotated module for handling connection and operations with MinIO data lake.
 """
+
+from __future__ import annotations
 
 import io
 import json
 import logging
 import os
 import sys
+from typing import Any, Dict, List
 
+import pandas as pd
 from minio import Minio
 from minio.error import S3Error
 
@@ -23,15 +28,20 @@ from src.weather_config.storage_config import (
     MINIO_SECURE,
 )
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class MinIOClient:
-    """Client for interacting with MinIO data lake"""
+    """
+    Client for interacting with MinIO data lake.
 
-    def __init__(self):
-        """Initialize MinIO client and ensure buckets exist"""
-        self.client = Minio(
+    Attributes:
+        client: Minio client instance
+    """
+
+    def __init__(self) -> None:
+        """Initialize MinIO client and ensure buckets exist."""
+        self.client: Minio = Minio(
             MINIO_ENDPOINT,
             access_key=MINIO_ACCESS_KEY,
             secret_key=MINIO_SECRET_KEY,
@@ -39,12 +49,13 @@ class MinIOClient:
         )
         self._ensure_buckets()
 
-    def _ensure_buckets(self):
+    def _ensure_buckets(self) -> None:
         """
-        Create buckets if they don't exist
-        Supports three API sources: OpenWeather, Open-Meteo, AEMET
+        Create buckets if they don't exist.
+
+        Supports three API sources: OpenWeather, Open-Meteo, AEMET.
         """
-        buckets = [
+        buckets: List[str] = [
             # OpenWeather API (existing)
             "bronze-openweather",
             "silver-openweather",
@@ -67,9 +78,9 @@ class MinIOClient:
                 logger.error(f"❌ Error creating bucket {bucket}: {e}")
                 raise
 
-    def upload_json(self, bucket, object_name, data):
+    def upload_json(self, bucket: str, object_name: str, data: Dict[str, Any]) -> int:
         """
-        Upload JSON data to MinIO
+        Upload JSON data to MinIO.
 
         Args:
             bucket: Bucket name
@@ -80,7 +91,7 @@ class MinIOClient:
             Size of uploaded data in bytes
         """
         try:
-            json_bytes = json.dumps(data, indent=2).encode("utf-8")
+            json_bytes: bytes = json.dumps(data, indent=2).encode("utf-8")
             self.client.put_object(
                 bucket,
                 object_name,
@@ -94,9 +105,9 @@ class MinIOClient:
             logger.error(f"Error uploading JSON to {bucket}/{object_name}: {e}")
             raise
 
-    def upload_parquet(self, bucket, object_name, dataframe):
+    def upload_parquet(self, bucket: str, object_name: str, dataframe: pd.DataFrame) -> int:
         """
-        Upload Parquet data to MinIO
+        Upload Parquet data to MinIO.
 
         Args:
             bucket: Bucket name
@@ -107,11 +118,11 @@ class MinIOClient:
             Size of uploaded data in bytes
         """
         try:
-            parquet_buffer = io.BytesIO()
+            parquet_buffer: io.BytesIO = io.BytesIO()
             dataframe.to_parquet(parquet_buffer, engine="pyarrow", index=False)
             parquet_buffer.seek(0)
 
-            size = parquet_buffer.getbuffer().nbytes
+            size: int = parquet_buffer.getbuffer().nbytes
 
             self.client.put_object(
                 bucket,
@@ -126,9 +137,9 @@ class MinIOClient:
             logger.error(f"Error uploading Parquet to {bucket}/{object_name}: {e}")
             raise
 
-    def read_json(self, bucket, object_name):
+    def read_json(self, bucket: str, object_name: str) -> Dict[str, Any]:
         """
-        Read JSON data from MinIO
+        Read JSON data from MinIO.
 
         Args:
             bucket: Bucket name
@@ -139,16 +150,16 @@ class MinIOClient:
         """
         try:
             response = self.client.get_object(bucket, object_name)
-            data = json.loads(response.read())
+            data: Dict[str, Any] = json.loads(response.read())
             logger.info(f"Read JSON from {bucket}/{object_name}")
             return data
         except S3Error as e:
             logger.error(f"Error reading JSON from {bucket}/{object_name}: {e}")
             raise
 
-    def read_parquet(self, bucket, object_name):
+    def read_parquet(self, bucket: str, object_name: str) -> pd.DataFrame:
         """
-        Read Parquet data from MinIO
+        Read Parquet data from MinIO.
 
         Args:
             bucket: Bucket name
@@ -158,19 +169,17 @@ class MinIOClient:
             Pandas DataFrame
         """
         try:
-            import pandas as pd
-
             response = self.client.get_object(bucket, object_name)
-            df = pd.read_parquet(io.BytesIO(response.read()))
+            df: pd.DataFrame = pd.read_parquet(io.BytesIO(response.read()))
             logger.info(f"Read Parquet from {bucket}/{object_name} ({len(df)} rows)")
             return df
         except S3Error as e:
             logger.error(f"Error reading Parquet from {bucket}/{object_name}: {e}")
             raise
 
-    def list_objects(self, bucket, prefix=""):
+    def list_objects(self, bucket: str, prefix: str = "") -> List[str]:
         """
-        List objects in bucket with optional prefix
+        List objects in bucket with optional prefix.
 
         Args:
             bucket: Bucket name
@@ -181,7 +190,7 @@ class MinIOClient:
         """
         try:
             objects = self.client.list_objects(bucket, prefix=prefix, recursive=True)
-            object_list = [obj.object_name for obj in objects]
+            object_list: List[str] = [obj.object_name for obj in objects]
             logger.info(f"Listed {len(object_list)} objects in {bucket} with prefix '{prefix}'")
             return object_list
         except S3Error as e:

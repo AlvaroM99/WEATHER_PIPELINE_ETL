@@ -1,10 +1,15 @@
 """
 Unified Transformer
 Consolidates all transformation logic into a single class.
+
+Type-annotated module for weather data transformation (Bronze → Silver).
 """
+
+from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -17,24 +22,38 @@ from src.weather_config.lake_config import (
 )
 from src.weather_utils.minio_client import MinIOClient
 
+# Type aliases for common patterns
+AirflowContext = Dict[str, Any]
+BronzeObject = Dict[str, Any]
+TransformedRecord = Dict[str, Any]
+
 
 class Transformer:
     """
     Unified Transformer Manager.
+
     Handles transformation for OpenWeatherMap and Open-Meteo services.
+
+    Attributes:
+        logger: Logger instance for this class
+        minio_client: MinIO client for data lake operations
     """
 
-    def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.minio_client = MinIOClient()
+    def __init__(self) -> None:
+        """Initialize the Transformer with logger and MinIO client."""
+        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
+        self.minio_client: MinIOClient = MinIOClient()
 
-    def log_start(self, msg: str):
+    def log_start(self, msg: str) -> None:
+        """Log the start of a transformation operation."""
         self.logger.info(f"🚀 START: {msg}")
 
-    def log_end(self, msg: str):
+    def log_end(self, msg: str) -> None:
+        """Log the end of a transformation operation."""
         self.logger.info(f"🏁 END: {msg}")
 
-    def log_error(self, msg: str, error: Exception = None):
+    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
+        """Log an error message with optional exception details."""
         if error:
             self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
         else:
@@ -44,12 +63,20 @@ class Transformer:
     # OpenWeatherMap Transformation
     # ========================================================================
 
-    def transform_openweather(self, **context):
-        """Transform OpenWeather data from JSON to Parquet"""
+    def transform_openweather(self, **context: Any) -> int:
+        """
+        Transform OpenWeather data from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming OpenWeather data (Bronze → Silver)")
 
-        execution_date = context.get("ds")
-        bronze_objects = self._get_upstream_data(
+        execution_date: Optional[str] = context.get("ds")
+        bronze_objects: Optional[List[BronzeObject]] = self._get_upstream_data(
             context, ["extract_to_bronze", "extract_openweather"], "bronze_objects"
         )
 
@@ -58,7 +85,7 @@ class Transformer:
 
         if not bronze_objects:
             # Fallback: Scan bronze bucket
-            prefix = f"current/{execution_date}/"
+            prefix: str = f"current/{execution_date}/"
             try:
                 objects = self.minio_client.client.list_objects(
                     BRONZE_BUCKET, prefix=prefix, recursive=True
@@ -75,16 +102,16 @@ class Transformer:
             self.logger.warning("No bronze data to transform")
             return 0
 
-        transformed_records = []
+        transformed_records: List[TransformedRecord] = []
         for bronze_obj in bronze_objects:
             try:
-                object_path = bronze_obj.get("object_path")
+                object_path: Optional[str] = bronze_obj.get("object_path")
                 if not object_path:
                     continue
 
-                raw_data = self.minio_client.read_json(BRONZE_BUCKET, object_path)
+                raw_data: Dict[str, Any] = self.minio_client.read_json(BRONZE_BUCKET, object_path)
 
-                transformed = {
+                transformed: TransformedRecord = {
                     "city": raw_data.get("_metadata", {}).get("city_name", "Unknown"),
                     "country": raw_data.get("sys", {}).get("country", "ES"),
                     "latitude": raw_data.get("coord", {}).get("lat"),
@@ -114,9 +141,9 @@ class Transformer:
         if not transformed_records:
             return 0
 
-        df = pd.DataFrame(transformed_records)
-        silver_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
-        file_size = self.minio_client.upload_parquet(SILVER_BUCKET, silver_path, df)
+        df: pd.DataFrame = pd.DataFrame(transformed_records)
+        silver_path: str = SILVER_PATH_TEMPLATE.format(date=execution_date)
+        file_size: int = self.minio_client.upload_parquet(SILVER_BUCKET, silver_path, df)
 
         self.log_end(f"Stored {len(df)} records in {silver_path}")
         return len(df)
@@ -125,8 +152,16 @@ class Transformer:
     # Open-Meteo Daily Transformation
     # ========================================================================
 
-    def transform_openmeteo_daily(self, **context):
-        """Transform Open-Meteo daily forecast from JSON to Parquet"""
+    def transform_openmeteo_daily(self, **context: Any) -> int:
+        """
+        Transform Open-Meteo daily forecast from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming Open-Meteo DAILY forecast")
         return self._transform_generic(
             context=context,
@@ -142,8 +177,16 @@ class Transformer:
     # Open-Meteo Hourly Transformation
     # ========================================================================
 
-    def transform_openmeteo_hourly(self, **context):
-        """Transform Open-Meteo hourly forecast from JSON to Parquet"""
+    def transform_openmeteo_hourly(self, **context: Any) -> int:
+        """
+        Transform Open-Meteo hourly forecast from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming Open-Meteo HOURLY forecast")
         return self._transform_generic(
             context=context,
@@ -159,8 +202,16 @@ class Transformer:
     # Open-Meteo Air Quality Transformation
     # ========================================================================
 
-    def transform_openmeteo_air_quality(self, **context):
-        """Transform Open-Meteo air quality from JSON to Parquet"""
+    def transform_openmeteo_air_quality(self, **context: Any) -> int:
+        """
+        Transform Open-Meteo air quality from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming Open-Meteo AIR QUALITY")
         return self._transform_generic(
             context=context,
@@ -176,8 +227,16 @@ class Transformer:
     # Open-Meteo Pollen Transformation
     # ========================================================================
 
-    def transform_openmeteo_pollen(self, **context):
-        """Transform Open-Meteo pollen from JSON to Parquet"""
+    def transform_openmeteo_pollen(self, **context: Any) -> int:
+        """
+        Transform Open-Meteo pollen from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming Open-Meteo POLLEN")
         return self._transform_generic(
             context=context,
@@ -193,8 +252,16 @@ class Transformer:
     # Open-Meteo Marine Transformation
     # ========================================================================
 
-    def transform_openmeteo_marine(self, **context):
-        """Transform Open-Meteo marine from JSON to Parquet"""
+    def transform_openmeteo_marine(self, **context: Any) -> int:
+        """
+        Transform Open-Meteo marine from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
         self.log_start("Transforming Open-Meteo MARINE")
         return self._transform_generic(
             context=context,
@@ -212,27 +279,41 @@ class Transformer:
 
     def _transform_generic(
         self,
-        context,
-        upstream_keys,
-        upstream_tasks,
-        bucket_search_prefix,
-        data_key,
-        silver_path_prefix,
-        file_suffix,
-    ):
-        """Generic transformation logic for Open-Meteo files"""
-        execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        context: AirflowContext,
+        upstream_keys: List[str],
+        upstream_tasks: List[str],
+        bucket_search_prefix: str,
+        data_key: str,
+        silver_path_prefix: str,
+        file_suffix: str,
+    ) -> int:
+        """
+        Generic transformation logic for Open-Meteo files.
+
+        Args:
+            context: Airflow context
+            upstream_keys: XCom keys to search for
+            upstream_tasks: Task IDs to pull XCom from
+            bucket_search_prefix: Prefix for fallback bucket scan
+            data_key: Key in JSON data ('hourly' or 'daily')
+            silver_path_prefix: Prefix for silver layer path
+            file_suffix: Suffix for output file
+
+        Returns:
+            Number of transformed records
+        """
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Get Upstream Data
-        bronze_objects = None
+        bronze_objects: Optional[List[BronzeObject]] = None
         for task_id in upstream_tasks:
             for key in upstream_keys:
                 try:
                     bronze_objects = context["task_instance"].xcom_pull(key=key, task_ids=task_id)
                     if bronze_objects:
                         break
-                except:
+                except Exception:
                     continue
             if bronze_objects:
                 break
@@ -240,7 +321,7 @@ class Transformer:
         # Fallback Scan
         if not bronze_objects:
             self.logger.warning(f"No XCom data, scanning bronze bucket for {execution_date}")
-            prefix = f"{bucket_search_prefix}{execution_date}/"
+            prefix: str = f"{bucket_search_prefix}{execution_date}/"
             try:
                 objects = list(
                     self.minio_client.client.list_objects(
@@ -259,24 +340,26 @@ class Transformer:
             self.logger.warning("No data to transform")
             return 0
 
-        all_dfs = []
+        all_dfs: List[pd.DataFrame] = []
         for bronze_obj in bronze_objects:
             try:
-                object_path = bronze_obj.get("object_path")
+                object_path: Optional[str] = bronze_obj.get("object_path")
                 if not object_path:
                     continue
 
-                data = self.minio_client.read_json(BRONZE_OPENMETEO_BUCKET, object_path)
+                data: Dict[str, Any] = self.minio_client.read_json(
+                    BRONZE_OPENMETEO_BUCKET, object_path
+                )
 
                 # Handle different data structures (daily vs hourly dicts inside response)
                 # Some endpoints return 'hourly' dict, some 'daily' dict.
                 # We check the generic data_key passed in, but also fallback if needed.
-                target_data = data.get(data_key)
+                target_data: Optional[Dict[str, Any]] = data.get(data_key)
                 if not target_data and data_key == "hourly" and "daily" in data:
                     target_data = data["daily"]  # Fallback for marine if it uses daily
 
                 if target_data and "time" in target_data:
-                    df = pd.DataFrame(target_data)
+                    df: pd.DataFrame = pd.DataFrame(target_data)
                     df["city_code"] = data.get("city_code")
                     df["city_name"] = data.get("municipio_nombre", "Unknown")
                     df["extraction_date"] = execution_date
@@ -291,23 +374,37 @@ class Transformer:
         if not all_dfs:
             return 0
 
-        combined_df = pd.concat(all_dfs, ignore_index=True)
-        silver_path = f"{silver_path_prefix}{execution_date}/{file_suffix}_{timestamp}.parquet"
-        file_size = self.minio_client.upload_parquet(
+        combined_df: pd.DataFrame = pd.concat(all_dfs, ignore_index=True)
+        silver_path: str = f"{silver_path_prefix}{execution_date}/{file_suffix}_{timestamp}.parquet"
+        file_size: int = self.minio_client.upload_parquet(
             SILVER_OPENMETEO_BUCKET, silver_path, combined_df
         )
 
         self.log_end(f"Stored {len(combined_df)} records to {silver_path}")
         return len(combined_df)
 
-    def _get_upstream_data(self, context, task_ids, key):
+    def _get_upstream_data(
+        self, context: AirflowContext, task_ids: List[str], key: str
+    ) -> Optional[List[BronzeObject]]:
+        """
+        Get data from upstream tasks via XCom.
+
+        Args:
+            context: Airflow context
+            task_ids: List of task IDs to try
+            key: XCom key to retrieve
+
+        Returns:
+            Data from XCom or None if not found
+        """
         if not context.get("task_instance"):
             return None
         for task_id in task_ids:
             try:
                 val = context["task_instance"].xcom_pull(key=key, task_ids=task_id)
                 if val:
-                    return val
-            except:
+                    result: List[BronzeObject] = val
+                    return result
+            except Exception:
                 continue
         return None

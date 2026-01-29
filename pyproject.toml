@@ -61,13 +61,42 @@ known_third_party = ["pandas", "requests", "minio", "psycopg2", "dotenv", "pyarr
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 # ============================================================================
-# MYPY - Type Checking
+# MYPY - Type Checking (Strict Configuration)
 # ============================================================================
 [tool.mypy]
 python_version = "3.11"
+
+# Strict type checking options
+strict = false  # Start with false, enable gradually
 warn_return_any = true
 warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+# Disallow untyped definitions (gradual adoption)
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = false
+
+# Check untyped calls
+check_untyped_defs = true
+
+# Strictness for None handling
+strict_optional = true
+no_implicit_optional = true
+
+# Show error codes for easier ignoring
+show_error_codes = true
+show_column_numbers = true
+
+# Performance
+cache_dir = ".mypy_cache"
+
+# Ignore missing imports for external libraries
 ignore_missing_imports = true
+
+# Exclude patterns
 exclude = [
     "venv",
     ".venv",
@@ -75,18 +104,45 @@ exclude = [
     "htmlcov",
     "build",
     "dist",
-    "tests"
+    "tests",
+    "dags"
 ]
 
+# Per-module overrides for external libraries
 [[tool.mypy.overrides]]
 module = [
     "minio.*",
     "psycopg2.*",
     "great_expectations.*",
     "responses.*",
-    "faker.*"
+    "faker.*",
+    "airflow.*",
+    "pyarrow.*",
+    "yaml.*",
+    "requests.*"
 ]
 ignore_missing_imports = true
+
+# Less strict for config modules during transition
+[[tool.mypy.overrides]]
+module = "src.weather_config.*"
+disallow_untyped_defs = false
+warn_return_any = false
+
+# Less strict for data quality module (needs separate typing effort)
+[[tool.mypy.overrides]]
+module = "src.data_quality.*"
+ignore_errors = true
+
+# Less strict for debug utils (needs separate typing effort)
+[[tool.mypy.overrides]]
+module = "src.weather_utils.debug_utils"
+ignore_errors = true
+
+# Less strict for DAGs (Airflow dynamic imports)
+[[tool.mypy.overrides]]
+module = "dags.*"
+ignore_errors = true
 
 # ============================================================================
 # PYTEST - Testing Configuration

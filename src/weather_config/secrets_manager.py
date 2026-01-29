@@ -18,7 +18,7 @@ Connection IDs:
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def _is_airflow_context() -> bool:
         return False
 
 
-def _get_airflow_connection(conn_id: str):
+def _get_airflow_connection(conn_id: str) -> Optional[Any]:
     """
     Retrieve an Airflow Connection by ID.
 

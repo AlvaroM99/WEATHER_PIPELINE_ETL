@@ -1,6 +1,15 @@
+"""
+Dimensional Loader Module
+
+Type-annotated module for loading dimensional tables into the data warehouse.
+"""
+
+from __future__ import annotations
+
 import logging
 from datetime import date, timedelta
 from io import StringIO
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import psycopg2
@@ -13,8 +22,11 @@ from src.weather_config.app_config import (
     POSTGRES_USER,
 )
 
+# Type aliases
+AirflowContext = Dict[str, Any]
+
 # GitHub URL for raw_cities.csv
-CITIES_CSV_URL = (
+CITIES_CSV_URL: str = (
     "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
 )
 
@@ -22,38 +34,56 @@ CITIES_CSV_URL = (
 class DimensionalLoader:
     """
     Dimensional Loader Manager.
+
     Handles loading for dimensional tables (Time, City, etc.).
+
+    Attributes:
+        logger: Logger instance for this class
     """
 
-    def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
+    def __init__(self) -> None:
+        """Initialize the DimensionalLoader with logger."""
+        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
 
-    def log_start(self, msg: str):
+    def log_start(self, msg: str) -> None:
+        """Log the start of a loading operation."""
         self.logger.info(f"🚀 START: {msg}")
 
-    def log_end(self, msg: str):
+    def log_end(self, msg: str) -> None:
+        """Log the end of a loading operation."""
         self.logger.info(f"🏁 END: {msg}")
 
-    def log_error(self, msg: str, error: Exception = None):
+    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
+        """Log an error message with optional exception details."""
         if error:
             self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
         else:
             self.logger.error(f"❌ ERROR: {msg}")
 
-    def get_db_connection(self):
+    def get_db_connection(self) -> psycopg2.extensions.connection:
+        """
+        Get a PostgreSQL database connection.
+
+        Returns:
+            psycopg2 connection object
+        """
         return psycopg2.connect(
             host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
         )
 
-    def load_dim_date(self):
-        """Generates and loads date dimension (2020-2030)"""
-        self.log_start("Loading dim_date...")
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+    def load_dim_date(self) -> None:
+        """
+        Generate and load date dimension (2020-2030).
 
-        start_date = date(2020, 1, 1)
-        end_date = date(2030, 12, 31)
-        delta = end_date - start_date
+        Creates date records with calendar attributes for the full decade.
+        """
+        self.log_start("Loading dim_date...")
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
+
+        start_date: date = date(2020, 1, 1)
+        end_date: date = date(2030, 12, 31)
+        delta: timedelta = end_date - start_date
 
         try:
             for i in range(delta.days + 1):
@@ -100,11 +130,16 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_city(self):
-        """Loads Spanish capitals from GitHub CSV into dim_city"""
+    def load_dim_city(self) -> None:
+        """
+        Load Spanish capitals from GitHub CSV into dim_city.
+
+        Downloads city data from the configured GitHub repository and upserts
+        into the database.
+        """
         self.log_start("Loading dim_city from GitHub CSV...")
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
             # Download CSV from GitHub
@@ -169,11 +204,11 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_week(self):
-        """Populates dim_week based on dim_date"""
+    def load_dim_week(self) -> None:
+        """Populate dim_week based on dim_date."""
         self.log_start("Loading dim_week...")
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
         try:
             cur.execute("""
                 INSERT INTO dwh.dim_week (
@@ -203,11 +238,11 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_month(self):
-        """Populates dim_month based on dim_date"""
+    def load_dim_month(self) -> None:
+        """Populate dim_month based on dim_date."""
         self.log_start("Loading dim_month...")
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
         try:
             cur.execute("""
                 INSERT INTO dwh.dim_month (
@@ -240,12 +275,12 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_seasons(self):
-        """Load seasons dimension (static data)"""
+    def load_dim_seasons(self) -> None:
+        """Load seasons dimension (static data)."""
         self.logger.info("Loading dim_seasons...")
 
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
             cur.execute("""
@@ -283,12 +318,12 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_layers(self):
-        """Load atmospheric/soil layers dimension (static data)"""
+    def load_dim_layers(self) -> None:
+        """Load atmospheric/soil layers dimension (static data)."""
         self.logger.info("Loading dim_layers...")
 
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
             cur.execute("""
@@ -327,12 +362,12 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_dim_severity(self):
-        """Load weather severity dimension (static data)"""
+    def load_dim_severity(self) -> None:
+        """Load weather severity dimension (static data)."""
         self.logger.info("Loading dim_severity...")
 
-        conn = self.get_db_connection()
-        cur = conn.cursor()
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
             cur.execute("""
@@ -354,8 +389,13 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
-    def load_all_dimensional_tables(self, **context):
-        """Wrapper to load all dimensional tables"""
+    def load_all_dimensional_tables(self, **context: Any) -> None:
+        """
+        Wrapper to load all dimensional tables.
+
+        Args:
+            context: Airflow context (not used, but required for task compatibility)
+        """
         self.log_start("Starting usage of load_all_dimensional_tables...")
 
         # Order matters: dim_date first (dependency for week and month)
