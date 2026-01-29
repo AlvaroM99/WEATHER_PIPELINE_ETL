@@ -2,11 +2,16 @@
 Unified Loader
 Consolidates all loading logic into a single class.
 Includes data quality validation using Great Expectations (optional).
+
+Type-annotated module for loading data into the data warehouse (Silver → Gold).
 """
+
+from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Callable, Optional
+from datetime import time as dt_time
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import psycopg2
@@ -20,6 +25,12 @@ from src.weather_config.app_config import (
 )
 from src.weather_config.lake_config import SILVER_OPENWEATHER_BUCKET, SILVER_PATH_TEMPLATE
 from src.weather_utils.minio_client import MinIOClient
+
+# Type aliases for common patterns
+AirflowContext = Dict[str, Any]
+CityIdMapping = Dict[str, int]
+RecordTuple = Tuple[Any, ...]
+MapperFunction = Callable[[pd.Series, int, int], RecordTuple]
 
 # Data quality imports (optional - graceful degradation if not installed)
 DATA_QUALITY_AVAILABLE = False
@@ -39,9 +50,9 @@ try:
     DATA_QUALITY_AVAILABLE = True
 except ImportError as e:
     # Great Expectations not installed - validation will be disabled
-    DataQualityException = Exception
-    DataQualityMetrics = None
-    ValidationResult = None
+    DataQualityException = Exception  # type: ignore[misc,assignment]
+    DataQualityMetrics = None  # type: ignore[misc,assignment]
+    ValidationResult = None  # type: ignore[misc,assignment]
     logging.getLogger(__name__).warning(
         f"Data quality module not available: {e}. "
         "Install great_expectations to enable validation."
@@ -51,7 +62,16 @@ except ImportError as e:
 class Loader:
     """
     Unified Loader Manager.
+
     Handles loading for all fact tables with integrated data quality validation.
+
+    Attributes:
+        logger: Logger instance for this class
+        minio_client: MinIO client for data lake operations
+        enable_validation: Whether data validation is enabled
+        strict_validation: Whether to raise exceptions on validation failure
+        collect_metrics: Whether to collect quality metrics
+        quality_metrics: Quality metrics collector instance
     """
 
     def __init__(
@@ -59,7 +79,7 @@ class Loader:
         enable_validation: bool = True,
         strict_validation: bool = False,
         collect_metrics: bool = True,
-    ):
+    ) -> None:
         """
         Initialize the Loader.
 
@@ -70,13 +90,13 @@ class Loader:
                               If False, logs warnings but continues loading
             collect_metrics: If True, collects quality metrics for reporting
         """
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.minio_client = MinIOClient()
+        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
+        self.minio_client: MinIOClient = MinIOClient()
 
         # Data quality configuration (only if module is available)
-        self.enable_validation = enable_validation and DATA_QUALITY_AVAILABLE
-        self.strict_validation = strict_validation
-        self.collect_metrics = collect_metrics and DATA_QUALITY_AVAILABLE
+        self.enable_validation: bool = enable_validation and DATA_QUALITY_AVAILABLE
+        self.strict_validation: bool = strict_validation
+        self.collect_metrics: bool = collect_metrics and DATA_QUALITY_AVAILABLE
 
         if enable_validation and not DATA_QUALITY_AVAILABLE:
             self.logger.warning(
@@ -84,18 +104,21 @@ class Loader:
                 "Validation will be skipped."
             )
 
-        self.quality_metrics = (
-            DataQualityMetrics() if self.collect_metrics and DataQualityMetrics else None
+        self.quality_metrics: Optional[Any] = (
+            DataQualityMetrics() if self.collect_metrics and DATA_QUALITY_AVAILABLE else None
         )
-        self._last_validation_results = {}
+        self._last_validation_results: Dict[str, Any] = {}
 
-    def log_start(self, msg: str):
+    def log_start(self, msg: str) -> None:
+        """Log the start of a loading operation."""
         self.logger.info(f"🚀 START: {msg}")
 
-    def log_end(self, msg: str):
+    def log_end(self, msg: str) -> None:
+        """Log the end of a loading operation."""
         self.logger.info(f"🏁 END: {msg}")
 
-    def log_error(self, msg: str, error: Exception = None):
+    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
+        """Log an error message with optional exception details."""
         if error:
             self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
         else:
@@ -182,40 +205,74 @@ class Loader:
                 raise DataQualityException(f"Validation error for {table_name}: {e}")
             return None
 
-    def get_validation_result(self, table_name: str) -> Optional[ValidationResult]:
+    def get_validation_result(self, table_name: str) -> Optional[Any]:
         """Get the last validation result for a table."""
         return self._last_validation_results.get(table_name)
 
-    def get_quality_report(self) -> dict:
+    def get_quality_report(self) -> Dict[str, Any]:
         """Get a summary of all validation results."""
         return {table: result.to_dict() for table, result in self._last_validation_results.items()}
 
-    def get_db_connection(self):
+    def get_db_connection(self) -> psycopg2.extensions.connection:
+        """
+        Get a PostgreSQL database connection.
+
+        Returns:
+            psycopg2 connection object
+        """
         return psycopg2.connect(
             host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
         )
 
-    def get_city_id_mapping(self, conn):
-        cur = conn.cursor()
+    def get_city_id_mapping(
+        self, conn: psycopg2.extensions.connection
+    ) -> Tuple[CityIdMapping, CityIdMapping]:
+        """
+        Get city ID mappings from the database.
+
+        Args:
+            conn: Database connection
+
+        Returns:
+            Tuple of (name_map, code_map) dictionaries
+        """
+        cur: psycopg2.extensions.cursor = conn.cursor()
         cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
         # Also map city_name for OpenWeather which uses names
         cur.execute("SELECT city_name, city_id FROM dwh.dim_city")
-        name_map = {row[0]: row[1] for row in cur.fetchall()}
+        name_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
 
         cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
-        code_map = {row[0]: row[1] for row in cur.fetchall()}
+        code_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
 
         cur.close()
         return name_map, code_map
 
-    def get_date_id(self, date_str):
+    def get_date_id(self, date_str: Any) -> Optional[int]:
+        """
+        Convert a date string to a date ID (YYYYMMDD format).
+
+        Args:
+            date_str: Date string or datetime object
+
+        Returns:
+            Integer date ID or None if conversion fails
+        """
         try:
             return int(str(date_str)[:10].replace("-", ""))
         except ValueError:
             return None
 
-    def clean_value(self, value):
-        """Convert NaN/NaT to None for database insertion"""
+    def clean_value(self, value: Any) -> Any:
+        """
+        Convert NaN/NaT to None for database insertion.
+
+        Args:
+            value: Value to clean
+
+        Returns:
+            None if value is NaN/NaT, otherwise the original value
+        """
         if pd.isna(value):
             return None
         return value
@@ -224,8 +281,16 @@ class Loader:
     # Fact Observation Load
     # ========================================================================
 
-    def load_fact_observation(self, **context):
-        """Load weather observations to dwh.fct_weather_observation"""
+    def load_fact_observation(self, **context: Any) -> int:
+        """
+        Load weather observations to dwh.fct_weather_observation.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_weather_observation")
         conn = self.get_db_connection()
         try:
@@ -300,9 +365,10 @@ class Loader:
             cur = conn.cursor()
             execute_values(cur, insert_query, records)
             conn.commit()
-            self.log_end(f"Inserted {cur.rowcount} records")
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            self.log_end(f"Inserted {rowcount} records")
             cur.close()
-            return cur.rowcount
+            return rowcount
         except Exception as e:
             conn.rollback()
             self.log_error("Error loading observation", e)
@@ -314,8 +380,16 @@ class Loader:
     # Fact Forecast Daily Load
     # ========================================================================
 
-    def load_fact_forecast_daily(self, **context):
-        """Load daily forecast to dwh.fct_weather_forecast"""
+    def load_fact_forecast_daily(self, **context: Any) -> int:
+        """
+        Load daily forecast to dwh.fct_weather_forecast.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_weather_forecast")
         return self._load_generic(
             context,
@@ -337,8 +411,11 @@ class Loader:
             table_name="fct_weather_forecast",
         )
 
-    def _map_daily_forecast(self, row, city_id, extraction_date_id):
-        forecast_date = pd.to_datetime(row.get("time")).strftime("%Y-%m-%d")
+    def _map_daily_forecast(
+        self, row: pd.Series, city_id: int, extraction_date_id: int
+    ) -> RecordTuple:
+        """Map a daily forecast row to a database record tuple."""
+        forecast_date: str = pd.to_datetime(row.get("time")).strftime("%Y-%m-%d")
         return (
             city_id,
             self.get_date_id(forecast_date),
@@ -366,8 +443,16 @@ class Loader:
     # Fact Forecast Hourly Load
     # ========================================================================
 
-    def load_fact_forecast_hourly(self, **context):
-        """Load hourly forecast to dwh.fct_weather_forecast_hourly"""
+    def load_fact_forecast_hourly(self, **context: Any) -> int:
+        """
+        Load hourly forecast to dwh.fct_weather_forecast_hourly.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_weather_forecast_hourly")
         return self._load_generic(
             context,
@@ -390,7 +475,10 @@ class Loader:
             table_name="fct_weather_forecast_hourly",
         )
 
-    def _map_hourly_forecast(self, row, city_id, extraction_date_id):
+    def _map_hourly_forecast(
+        self, row: pd.Series, city_id: int, extraction_date_id: int
+    ) -> RecordTuple:
+        """Map an hourly forecast row to a database record tuple."""
         return (
             city_id,
             pd.to_datetime(row.get("time")),
@@ -419,8 +507,16 @@ class Loader:
     # Fact Air Quality Load
     # ========================================================================
 
-    def load_fact_air_quality(self, **context):
-        """Load air quality to dwh.fct_air_quality"""
+    def load_fact_air_quality(self, **context: Any) -> int:
+        """
+        Load air quality to dwh.fct_air_quality.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_air_quality")
         return self._load_generic(
             context,
@@ -439,8 +535,12 @@ class Loader:
             table_name="fct_air_quality",
         )
 
-    def _map_air_quality(self, row, city_id, extraction_date_id):
-        def g(k):
+    def _map_air_quality(
+        self, row: pd.Series, city_id: int, extraction_date_id: int
+    ) -> RecordTuple:
+        """Map an air quality row to a database record tuple."""
+
+        def g(k: str) -> Optional[Any]:
             return row.get(k) if pd.notna(row.get(k)) else None
 
         return (
@@ -461,8 +561,16 @@ class Loader:
     # Fact Pollen Load
     # ========================================================================
 
-    def load_fact_pollen(self, **context):
-        """Load pollen to dwh.fct_pollen"""
+    def load_fact_pollen(self, **context: Any) -> int:
+        """
+        Load pollen to dwh.fct_pollen.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_pollen")
         return self._load_generic(
             context,
@@ -481,8 +589,10 @@ class Loader:
             table_name="fct_pollen",
         )
 
-    def _map_pollen(self, row, city_id, extraction_date_id):
-        def g(k):
+    def _map_pollen(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
+        """Map a pollen row to a database record tuple."""
+
+        def g(k: str) -> Optional[Any]:
             return row.get(k) if pd.notna(row.get(k)) else None
 
         return (
@@ -501,8 +611,16 @@ class Loader:
     # Fact Marine Load
     # ========================================================================
 
-    def load_fact_marine(self, **context):
-        """Load marine data to dwh.fct_marine"""
+    def load_fact_marine(self, **context: Any) -> int:
+        """
+        Load marine data to dwh.fct_marine.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
         self.log_start("Loading fct_marine")
         return self._load_generic(
             context,
@@ -520,11 +638,13 @@ class Loader:
             table_name="fct_marine",
         )
 
-    def _map_marine(self, row, city_id, extraction_date_id):
-        def g(k):
+    def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
+        """Map a marine row to a database record tuple."""
+
+        def g(k: str) -> Optional[float]:
             return float(row.get(k)) if pd.notna(row.get(k)) else None
 
-        forecast_date_id = self.get_date_id(row.get("time"))
+        forecast_date_id: Optional[int] = self.get_date_id(row.get("time"))
         return (
             city_id,
             forecast_date_id,
@@ -546,14 +666,14 @@ class Loader:
 
     def _load_generic(
         self,
-        context,
-        bucket,
-        prefix_template,
-        insert_query,
-        mapper,
-        data_type: str = None,
-        table_name: str = None,
-    ):
+        context: AirflowContext,
+        bucket: str,
+        prefix_template: str,
+        insert_query: str,
+        mapper: MapperFunction,
+        data_type: Optional[str] = None,
+        table_name: Optional[str] = None,
+    ) -> int:
         """
         Generic loader with integrated data quality validation.
 
@@ -565,9 +685,12 @@ class Loader:
             mapper: Function to map DataFrame row to tuple
             data_type: Data type for validation ('daily_forecast', 'hourly_forecast', etc.)
             table_name: Target table name for logging
+
+        Returns:
+            Number of records inserted
         """
-        execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        extraction_date_id = self.get_date_id(execution_date)
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        extraction_date_id: int = self.get_date_id(execution_date) or 0
         conn = self.get_db_connection()
 
         try:
@@ -626,9 +749,10 @@ class Loader:
             execute_values(cur, insert_query, records_with_time)
             conn.commit()
 
-            self.logger.info(f"Inserted {cur.rowcount} records")
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            self.logger.info(f"Inserted {rowcount} records")
             cur.close()
-            return cur.rowcount
+            return rowcount
 
         except Exception as e:
             conn.rollback()
