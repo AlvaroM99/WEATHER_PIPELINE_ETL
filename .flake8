@@ -1,0 +1,28 @@
+[flake8]
+max-line-length = 100
+max-complexity = 10
+select = E,F,W,C90
+ignore = E501,W503,E203,E266,E402
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    htmlcov,
+    build,
+    dist,
+    *.egg-info,
+    .eggs,
+    dags,
+    migrations,
+    .pytest_cache,
+    .mypy_cache
+
+per-file-ignores =
+    __init__.py: F401
+    tests/*: S101
+    conftest.py: F401,F811
+
+statistics = True
+count = True
+show-source = True
