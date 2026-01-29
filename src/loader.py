@@ -1,12 +1,14 @@
 """
 Unified Loader
 Consolidates all loading logic into a single class.
+Includes data quality validation using Great Expectations (optional).
 """
 import logging
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 from datetime import datetime
+from typing import Optional, Callable
 
 from src.weather_config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
 from src.weather_config.lake_config import (
@@ -14,15 +16,69 @@ from src.weather_config.lake_config import (
 )
 from src.weather_utils.minio_client import MinIOClient
 
+# Data quality imports (optional - graceful degradation if not installed)
+DATA_QUALITY_AVAILABLE = False
+try:
+    from src.data_quality.exceptions import DataQualityException
+    from src.data_quality.expectations import (
+        validate_weather_observation,
+        validate_daily_forecast,
+        validate_hourly_forecast,
+        validate_air_quality,
+        validate_pollen,
+        validate_marine,
+    )
+    from src.data_quality.metrics import DataQualityMetrics
+    from src.data_quality.validators import ValidationResult
+    DATA_QUALITY_AVAILABLE = True
+except ImportError as e:
+    # Great Expectations not installed - validation will be disabled
+    DataQualityException = Exception
+    DataQualityMetrics = None
+    ValidationResult = None
+    logging.getLogger(__name__).warning(
+        f"Data quality module not available: {e}. "
+        "Install great_expectations to enable validation."
+    )
+
 class Loader:
     """
     Unified Loader Manager.
-    Handles loading for all fact tables.
+    Handles loading for all fact tables with integrated data quality validation.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        enable_validation: bool = True,
+        strict_validation: bool = False,
+        collect_metrics: bool = True
+    ):
+        """
+        Initialize the Loader.
+
+        Args:
+            enable_validation: If True, validates data before loading
+                              (requires great_expectations to be installed)
+            strict_validation: If True, raises exception on validation failure
+                              If False, logs warnings but continues loading
+            collect_metrics: If True, collects quality metrics for reporting
+        """
         self.logger = logging.getLogger(self.__class__.__name__)
         self.minio_client = MinIOClient()
+
+        # Data quality configuration (only if module is available)
+        self.enable_validation = enable_validation and DATA_QUALITY_AVAILABLE
+        self.strict_validation = strict_validation
+        self.collect_metrics = collect_metrics and DATA_QUALITY_AVAILABLE
+
+        if enable_validation and not DATA_QUALITY_AVAILABLE:
+            self.logger.warning(
+                "Data quality validation requested but great_expectations not installed. "
+                "Validation will be skipped."
+            )
+
+        self.quality_metrics = DataQualityMetrics() if self.collect_metrics and DataQualityMetrics else None
+        self._last_validation_results = {}
 
     def log_start(self, msg: str):
         self.logger.info(f"🚀 START: {msg}")
@@ -35,6 +91,97 @@ class Loader:
             self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
         else:
             self.logger.error(f"❌ ERROR: {msg}")
+
+    # ========================================================================
+    # Data Quality Validation Methods
+    # ========================================================================
+
+    def validate_data(
+        self,
+        df: pd.DataFrame,
+        data_type: str,
+        table_name: str
+    ) -> Optional[ValidationResult]:
+        """
+        Validate a DataFrame before loading.
+
+        Args:
+            df: DataFrame to validate
+            data_type: Type of data ('observation', 'daily_forecast', etc.)
+            table_name: Name of target table (for logging/metrics)
+
+        Returns:
+            ValidationResult if validation was run, None if disabled
+
+        Raises:
+            DataQualityException: If strict_validation is True and validation fails
+        """
+        if not self.enable_validation or not DATA_QUALITY_AVAILABLE:
+            return None
+
+        validators = {
+            'observation': validate_weather_observation,
+            'daily_forecast': validate_daily_forecast,
+            'hourly_forecast': validate_hourly_forecast,
+            'air_quality': validate_air_quality,
+            'pollen': validate_pollen,
+            'marine': validate_marine,
+        } if DATA_QUALITY_AVAILABLE else {}
+
+        validator_func = validators.get(data_type)
+        if not validator_func:
+            self.logger.warning(f"No validator found for data type: {data_type}")
+            return None
+
+        try:
+            result = validator_func(df, strict_mode=self.strict_validation)
+            self._last_validation_results[table_name] = result
+
+            # Log validation summary
+            if result.success:
+                self.logger.info(
+                    f"✅ Data quality check PASSED for {table_name}: "
+                    f"{result.successful_expectations}/{result.total_expectations} expectations met"
+                )
+            else:
+                self.logger.warning(
+                    f"⚠️ Data quality check FAILED for {table_name}: "
+                    f"{result.failed_expectations}/{result.total_expectations} expectations failed"
+                )
+                for detail in result.failed_details[:3]:
+                    self.logger.warning(f"   - {detail.get('expectation_type')}")
+
+            # Collect metrics if enabled
+            if self.collect_metrics and self.quality_metrics:
+                key_columns = ['city_name', 'time'] if 'city_name' in df.columns else ['city', 'date']
+                timestamp_col = 'time' if 'time' in df.columns else None
+                report = self.quality_metrics.generate_report(
+                    df, table_name, result,
+                    key_columns=key_columns,
+                    timestamp_column=timestamp_col
+                )
+                self.logger.info(f"📊 Quality score for {table_name}: {report.overall_score:.2%}")
+
+            return result
+
+        except DataQualityException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error during validation: {e}")
+            if self.strict_validation:
+                raise DataQualityException(f"Validation error for {table_name}: {e}")
+            return None
+
+    def get_validation_result(self, table_name: str) -> Optional[ValidationResult]:
+        """Get the last validation result for a table."""
+        return self._last_validation_results.get(table_name)
+
+    def get_quality_report(self) -> dict:
+        """Get a summary of all validation results."""
+        return {
+            table: result.to_dict()
+            for table, result in self._last_validation_results.items()
+        }
 
     def get_db_connection(self):
         return psycopg2.connect(
@@ -79,13 +226,16 @@ class Loader:
             name_map, _ = self.get_city_id_mapping(conn)
             execution_date = context.get('ds', datetime.now().strftime('%Y-%m-%d'))
             date_id = self.get_date_id(execution_date)
-            
+
             object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
             try:
                 df = self.minio_client.read_parquet(SILVER_OPENWEATHER_BUCKET, object_path)
             except Exception:
                 self.logger.warning(f"No data found for {execution_date}")
                 return 0
+
+            # Validate data quality before loading
+            self.validate_data(df, 'observation', 'fct_weather_observation')
 
             records = []
             for _, row in df.iterrows():
@@ -144,7 +294,7 @@ class Loader:
         """Load daily forecast to dwh.fct_weather_forecast"""
         self.log_start("Loading fct_weather_forecast")
         return self._load_generic(
-            context, 
+            context,
             bucket='silver-openmeteo',
             prefix_template="forecast/daily/{execution_date}/",
             insert_query="""
@@ -158,7 +308,9 @@ class Loader:
                     created_at
                 ) VALUES %s
             """,
-            mapper=self._map_daily_forecast
+            mapper=self._map_daily_forecast,
+            data_type='daily_forecast',
+            table_name='fct_weather_forecast'
         )
 
     def _map_daily_forecast(self, row, city_id, extraction_date_id):
@@ -200,7 +352,9 @@ class Loader:
                     weather_code, created_at
                 ) VALUES %s
             """,
-            mapper=self._map_hourly_forecast
+            mapper=self._map_hourly_forecast,
+            data_type='hourly_forecast',
+            table_name='fct_weather_forecast_hourly'
         )
 
     def _map_hourly_forecast(self, row, city_id, extraction_date_id):
@@ -235,7 +389,9 @@ class Loader:
                     created_at
                 ) VALUES %s
             """,
-            mapper=self._map_air_quality
+            mapper=self._map_air_quality,
+            data_type='air_quality',
+            table_name='fct_air_quality'
         )
 
     def _map_air_quality(self, row, city_id, extraction_date_id):
@@ -260,12 +416,14 @@ class Loader:
             insert_query="""
                 INSERT INTO dwh.fct_pollen (
                     city_id, measurement_datetime, extraction_date_id,
-                    alder_pollen, birch_pollen, grass_pollen, 
+                    alder_pollen, birch_pollen, grass_pollen,
                     mugwort_pollen, olive_pollen, ragweed_pollen,
                     created_at
                 ) VALUES %s
             """,
-            mapper=self._map_pollen
+            mapper=self._map_pollen,
+            data_type='pollen',
+            table_name='fct_pollen'
         )
 
     def _map_pollen(self, row, city_id, extraction_date_id):
@@ -294,7 +452,9 @@ class Loader:
                     wind_wave_height_max, swell_wave_height_max, created_at
                 ) VALUES %s
             """,
-            mapper=self._map_marine
+            mapper=self._map_marine,
+            data_type='marine',
+            table_name='fct_marine'
         )
 
     def _map_marine(self, row, city_id, extraction_date_id):
@@ -311,15 +471,36 @@ class Loader:
     # Generic Helper
     # ========================================================================
 
-    def _load_generic(self, context, bucket, prefix_template, insert_query, mapper):
+    def _load_generic(
+        self,
+        context,
+        bucket,
+        prefix_template,
+        insert_query,
+        mapper,
+        data_type: str = None,
+        table_name: str = None
+    ):
+        """
+        Generic loader with integrated data quality validation.
+
+        Args:
+            context: Airflow context with execution date
+            bucket: MinIO bucket name
+            prefix_template: Path template with {execution_date} placeholder
+            insert_query: SQL INSERT statement
+            mapper: Function to map DataFrame row to tuple
+            data_type: Data type for validation ('daily_forecast', 'hourly_forecast', etc.)
+            table_name: Target table name for logging
+        """
         execution_date = context.get('ds', datetime.now().strftime('%Y-%m-%d'))
         extraction_date_id = self.get_date_id(execution_date)
         conn = self.get_db_connection()
-        
+
         try:
             name_map, _ = self.get_city_id_mapping(conn)
             silver_path = prefix_template.format(execution_date=execution_date)
-            
+
             try:
                 objects = self.minio_client.client.list_objects(bucket, prefix=silver_path)
                 parquet_files = [obj.object_name for obj in objects if obj.object_name.endswith('.parquet')]
@@ -332,7 +513,11 @@ class Loader:
 
             latest_file = sorted(parquet_files)[-1]
             df = self.minio_client.read_parquet(bucket, latest_file)
-            
+
+            # Validate data quality before loading
+            if data_type and table_name:
+                self.validate_data(df, data_type, table_name)
+
             # Deduplicate data to avoid PK violations
             if 'city_name' in df.columns and 'time' in df.columns:
                 initial_count = len(df)
