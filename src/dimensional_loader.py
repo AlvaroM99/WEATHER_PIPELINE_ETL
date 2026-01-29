@@ -1,15 +1,23 @@
-
-
 import logging
-import psycopg2
-import requests
-import pandas as pd
 from datetime import date, timedelta
 from io import StringIO
-from src.weather_config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
+
+import pandas as pd
+import psycopg2
+import requests
+
+from src.weather_config.app_config import (
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_USER,
+)
 
 # GitHub URL for raw_cities.csv
-CITIES_CSV_URL = "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
+CITIES_CSV_URL = (
+    "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
+)
+
 
 class DimensionalLoader:
     """
@@ -34,10 +42,7 @@ class DimensionalLoader:
 
     def get_db_connection(self):
         return psycopg2.connect(
-            host=POSTGRES_HOST,
-            database=POSTGRES_DB,
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD
+            host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
         )
 
     def load_dim_date(self):
@@ -53,25 +58,38 @@ class DimensionalLoader:
         try:
             for i in range(delta.days + 1):
                 day = start_date + timedelta(days=i)
-                id_date = int(day.strftime('%Y%m%d'))
+                id_date = int(day.strftime("%Y%m%d"))
                 year = day.year
                 month = day.month
                 week = day.isocalendar()[1]
                 quarter = (month - 1) // 3 + 1
-                
-                cur.execute("""
+
+                cur.execute(
+                    """
                     INSERT INTO dwh.dim_date (
                         id_calendar_day, dt_date, id_year, id_calendar_month, id_month, 
                         id_calendar_week, id_week, id_weekday, id_quarter, 
                         id_calendar_quarter, id_calendar_semester, nm_day, ds_calendar_day
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id_calendar_day) DO NOTHING;
-                """, (
-                    id_date, day, year, int(f"{year}{month:02d}"), month,
-                    int(f"{year}{week:02d}"), week, day.isoweekday(), quarter,
-                    int(f"{year}{quarter}"), (month-1)//6 + 1, day.strftime('%A'), day.strftime('%Y-%m-%d')
-                ))
-            
+                """,
+                    (
+                        id_date,
+                        day,
+                        year,
+                        int(f"{year}{month:02d}"),
+                        month,
+                        int(f"{year}{week:02d}"),
+                        week,
+                        day.isoweekday(),
+                        quarter,
+                        int(f"{year}{quarter}"),
+                        (month - 1) // 6 + 1,
+                        day.strftime("%A"),
+                        day.strftime("%Y-%m-%d"),
+                    ),
+                )
+
             conn.commit()
             self.log_end("dim_date loaded successfully.")
         except Exception as e:
@@ -96,18 +114,28 @@ class DimensionalLoader:
 
             # Parse CSV
             csv_data = StringIO(response.text)
-            df = pd.read_csv(csv_data, sep=',')  # CSV format with commas
+            df = pd.read_csv(csv_data, sep=",")  # CSV format with commas
 
             # Validate required columns
-            required_cols = ['city_code', 'city_name', 'latitud', 'longitud', 'country_code', 'is_coastal']
+            required_cols = [
+                "city_code",
+                "city_name",
+                "latitud",
+                "longitud",
+                "country_code",
+                "is_coastal",
+            ]
             if not all(col in df.columns for col in required_cols):
-                raise ValueError(f"CSV missing required columns. Expected: {required_cols}, Got: {df.columns.tolist()}")
+                raise ValueError(
+                    f"CSV missing required columns. Expected: {required_cols}, Got: {df.columns.tolist()}"
+                )
 
             self.logger.info(f"✅ Successfully downloaded {len(df)} cities from GitHub")
 
             # Insert each city into database
             for _, row in df.iterrows():
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO dwh.dim_city (city_code, city_name, latitude, longitude, country_code, is_coastal)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (city_code) DO UPDATE
@@ -116,14 +144,16 @@ class DimensionalLoader:
                         longitude = EXCLUDED.longitude,
                         country_code = EXCLUDED.country_code,
                         is_coastal = EXCLUDED.is_coastal;
-                """, (
-                    row['city_code'],
-                    row['city_name'],
-                    row['latitud'],
-                    row['longitud'],
-                    row['country_code'],
-                    row['is_coastal']
-                ))
+                """,
+                    (
+                        row["city_code"],
+                        row["city_name"],
+                        row["latitud"],
+                        row["longitud"],
+                        row["country_code"],
+                        row["is_coastal"],
+                    ),
+                )
 
             conn.commit()
             self.log_end(f"dim_city loaded successfully with {len(df)} cities.")
@@ -213,10 +243,10 @@ class DimensionalLoader:
     def load_dim_seasons(self):
         """Load seasons dimension (static data)"""
         self.logger.info("Loading dim_seasons...")
-        
+
         conn = self.get_db_connection()
         cur = conn.cursor()
-        
+
         try:
             cur.execute("""
                 INSERT INTO dwh.dim_seasons (
@@ -245,10 +275,10 @@ class DimensionalLoader:
                     color_code = EXCLUDED.color_code,
                     description = EXCLUDED.description
             """)
-            
+
             conn.commit()
             self.logger.info(f"✅ Loaded 8 seasons into dim_seasons")
-            
+
         finally:
             cur.close()
             conn.close()
@@ -256,10 +286,10 @@ class DimensionalLoader:
     def load_dim_layers(self):
         """Load atmospheric/soil layers dimension (static data)"""
         self.logger.info("Loading dim_layers...")
-        
+
         conn = self.get_db_connection()
         cur = conn.cursor()
-        
+
         try:
             cur.execute("""
                 INSERT INTO dwh.dim_layers (
@@ -289,10 +319,10 @@ class DimensionalLoader:
                     layer_category = EXCLUDED.layer_category,
                     description = EXCLUDED.description
             """)
-            
+
             conn.commit()
             self.logger.info(f"✅ Loaded 9 layers into dim_layers")
-            
+
         finally:
             cur.close()
             conn.close()
@@ -300,10 +330,10 @@ class DimensionalLoader:
     def load_dim_severity(self):
         """Load weather severity dimension (static data)"""
         self.logger.info("Loading dim_severity...")
-        
+
         conn = self.get_db_connection()
         cur = conn.cursor()
-        
+
         try:
             cur.execute("""
                 INSERT INTO dwh.dim_severity (severity_id, severity_level, color_code, description) VALUES
@@ -316,10 +346,10 @@ class DimensionalLoader:
                     color_code = EXCLUDED.color_code, 
                     description = EXCLUDED.description
             """)
-            
+
             conn.commit()
             self.logger.info(f"✅ Loaded 4 severity levels into dim_severity")
-            
+
         finally:
             cur.close()
             conn.close()
@@ -327,19 +357,18 @@ class DimensionalLoader:
     def load_all_dimensional_tables(self, **context):
         """Wrapper to load all dimensional tables"""
         self.log_start("Starting usage of load_all_dimensional_tables...")
-        
+
         # Order matters: dim_date first (dependency for week and month)
         self.load_dim_date()
-        
+
         # Dependent on dim_date
         self.load_dim_week()
         self.load_dim_month()
-        
+
         # Independent
         self.load_dim_city()
         self.load_dim_seasons()
         self.load_dim_layers()
         self.load_dim_severity()
-        
-        self.log_end("All dimensional tables loaded.")
 
+        self.log_end("All dimensional tables loaded.")

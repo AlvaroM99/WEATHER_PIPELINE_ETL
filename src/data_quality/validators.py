@@ -5,9 +5,9 @@ Uses pandas-based validation for stability across Great Expectations versions.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -37,15 +37,15 @@ class ValidationResult:
     def to_dict(self) -> Dict:
         """Convert to dictionary for logging/storage."""
         return {
-            'success': self.success,
-            'table_name': self.table_name,
-            'validation_time': self.validation_time.isoformat(),
-            'total_expectations': self.total_expectations,
-            'successful_expectations': self.successful_expectations,
-            'failed_expectations': self.failed_expectations,
-            'success_rate': self.success_rate,
-            'failed_details': self.failed_details,
-            'statistics': self.statistics
+            "success": self.success,
+            "table_name": self.table_name,
+            "validation_time": self.validation_time.isoformat(),
+            "total_expectations": self.total_expectations,
+            "successful_expectations": self.successful_expectations,
+            "failed_expectations": self.failed_expectations,
+            "success_rate": self.success_rate,
+            "failed_details": self.failed_details,
+            "statistics": self.statistics,
         }
 
 
@@ -72,7 +72,7 @@ class DataQualityValidator:
         self,
         df: pd.DataFrame,
         required_columns: List[str],
-        column_types: Optional[Dict[str, str]] = None
+        column_types: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, List[str]]:
         """
         Validate that a DataFrame has required columns and correct types.
@@ -101,17 +101,19 @@ class DataQualityValidator:
 
                 actual_dtype = df[col].dtype
 
-                if expected_type == 'numeric':
+                if expected_type == "numeric":
                     if not pd.api.types.is_numeric_dtype(actual_dtype):
                         errors.append(f"Column '{col}' should be numeric, got {actual_dtype}")
-                elif expected_type == 'string':
-                    if not (pd.api.types.is_string_dtype(actual_dtype) or
-                            pd.api.types.is_object_dtype(actual_dtype)):
+                elif expected_type == "string":
+                    if not (
+                        pd.api.types.is_string_dtype(actual_dtype)
+                        or pd.api.types.is_object_dtype(actual_dtype)
+                    ):
                         errors.append(f"Column '{col}' should be string, got {actual_dtype}")
-                elif expected_type == 'datetime':
+                elif expected_type == "datetime":
                     if not pd.api.types.is_datetime64_any_dtype(actual_dtype):
                         errors.append(f"Column '{col}' should be datetime, got {actual_dtype}")
-                elif expected_type == 'boolean':
+                elif expected_type == "boolean":
                     if not pd.api.types.is_bool_dtype(actual_dtype):
                         errors.append(f"Column '{col}' should be boolean, got {actual_dtype}")
 
@@ -125,7 +127,7 @@ class DataQualityValidator:
         min_value: Optional[float] = None,
         max_value: Optional[float] = None,
         allow_null: bool = True,
-        mostly: float = 0.99
+        mostly: float = 0.99,
     ) -> Tuple[bool, int, float]:
         """
         Validate that column values fall within a specified range.
@@ -171,10 +173,7 @@ class DataQualityValidator:
         return is_valid, invalid_count, compliance_rate
 
     def validate_completeness(
-        self,
-        df: pd.DataFrame,
-        columns: List[str],
-        threshold: float = 0.95
+        self, df: pd.DataFrame, columns: List[str], threshold: float = 0.95
     ) -> Tuple[bool, Dict[str, float]]:
         """
         Validate that columns meet a completeness threshold.
@@ -208,11 +207,7 @@ class DataQualityValidator:
 
         return all_valid, scores
 
-    def validate_uniqueness(
-        self,
-        df: pd.DataFrame,
-        columns: List[str]
-    ) -> Tuple[bool, int]:
+    def validate_uniqueness(self, df: pd.DataFrame, columns: List[str]) -> Tuple[bool, int]:
         """
         Validate that a combination of columns forms unique records.
 
@@ -232,10 +227,7 @@ class DataQualityValidator:
         return duplicate_count == 0, duplicate_count
 
     def validate_not_null(
-        self,
-        df: pd.DataFrame,
-        column: str,
-        mostly: float = 0.95
+        self, df: pd.DataFrame, column: str, mostly: float = 0.95
     ) -> Tuple[bool, int, float]:
         """
         Validate that a column has mostly non-null values.
@@ -264,7 +256,7 @@ class DataQualityValidator:
         numeric_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
         completeness_columns: Optional[List[str]] = None,
         completeness_threshold: float = 0.95,
-        mostly: float = 0.99
+        mostly: float = 0.99,
     ) -> ValidationResult:
         """
         Run comprehensive validation on a DataFrame.
@@ -292,10 +284,9 @@ class DataQualityValidator:
             passed_checks += 1
         else:
             for error in schema_errors:
-                failed_details.append({
-                    'expectation_type': 'expect_column_to_exist',
-                    'error': error
-                })
+                failed_details.append(
+                    {"expectation_type": "expect_column_to_exist", "error": error}
+                )
 
         # Range validation for numeric columns
         if numeric_ranges:
@@ -310,13 +301,19 @@ class DataQualityValidator:
                 if is_valid:
                     passed_checks += 1
                 else:
-                    failed_details.append({
-                        'expectation_type': 'expect_column_values_to_be_between',
-                        'column': col,
-                        'unexpected_count': invalid_count,
-                        'unexpected_percent': (1.0 - compliance) * 100,
-                        'kwargs': {'min_value': min_val, 'max_value': max_val, 'mostly': mostly}
-                    })
+                    failed_details.append(
+                        {
+                            "expectation_type": "expect_column_values_to_be_between",
+                            "column": col,
+                            "unexpected_count": invalid_count,
+                            "unexpected_percent": (1.0 - compliance) * 100,
+                            "kwargs": {
+                                "min_value": min_val,
+                                "max_value": max_val,
+                                "mostly": mostly,
+                            },
+                        }
+                    )
 
         # Completeness validation for critical columns
         if completeness_columns:
@@ -331,24 +328,26 @@ class DataQualityValidator:
                 if is_valid:
                     passed_checks += 1
                 else:
-                    failed_details.append({
-                        'expectation_type': 'expect_column_values_to_not_be_null',
-                        'column': col,
-                        'unexpected_count': null_count,
-                        'unexpected_percent': (1.0 - completeness) * 100,
-                        'kwargs': {'mostly': completeness_threshold}
-                    })
+                    failed_details.append(
+                        {
+                            "expectation_type": "expect_column_values_to_not_be_null",
+                            "column": col,
+                            "unexpected_count": null_count,
+                            "unexpected_percent": (1.0 - completeness) * 100,
+                            "kwargs": {"mostly": completeness_threshold},
+                        }
+                    )
 
         success = len(failed_details) == 0
 
         # Calculate statistics
         statistics = {
-            'row_count': len(df),
-            'column_count': len(df.columns),
-            'evaluated_expectations': total_checks,
-            'successful_expectations': passed_checks,
-            'unsuccessful_expectations': total_checks - passed_checks,
-            'success_percent': (passed_checks / total_checks * 100) if total_checks > 0 else 100
+            "row_count": len(df),
+            "column_count": len(df.columns),
+            "evaluated_expectations": total_checks,
+            "successful_expectations": passed_checks,
+            "unsuccessful_expectations": total_checks - passed_checks,
+            "success_percent": (passed_checks / total_checks * 100) if total_checks > 0 else 100,
         }
 
         result = ValidationResult(
@@ -358,13 +357,12 @@ class DataQualityValidator:
             successful_expectations=passed_checks,
             failed_expectations=total_checks - passed_checks,
             failed_details=failed_details,
-            statistics=statistics
+            statistics=statistics,
         )
 
         if self.strict_mode and not success:
             raise DataQualityException(
-                f"Validation failed for {table_name}",
-                validation_results=result.to_dict()
+                f"Validation failed for {table_name}", validation_results=result.to_dict()
             )
 
         return result

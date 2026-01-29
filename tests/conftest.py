@@ -1,14 +1,16 @@
 """
 Shared pytest fixtures for Weather Pipeline ETL tests
 """
-import pytest
-import pandas as pd
-from unittest.mock import Mock, MagicMock
+
 from datetime import datetime
 from io import BytesIO
+from unittest.mock import MagicMock, Mock
 
+import pandas as pd
+import pytest
 
 # ===== Sample Data Fixtures =====
+
 
 @pytest.fixture
 def sample_openweather_response():
@@ -22,14 +24,14 @@ def sample_openweather_response():
             "temp_min": 12.0,
             "temp_max": 18.0,
             "pressure": 1013,
-            "humidity": 65
+            "humidity": 65,
         },
         "wind": {"speed": 3.5, "deg": 180, "gust": 5.0},
         "clouds": {"all": 10},
         "visibility": 10000,
         "dt": 1706543400,
         "sys": {"country": "ES"},
-        "name": "Madrid"
+        "name": "Madrid",
     }
 
 
@@ -59,14 +61,11 @@ def sample_openmeteo_daily_response():
             "sunset": ["2026-01-29T18:15:00", "2026-01-30T18:16:00"],
             "shortwave_radiation_sum": [5.2, 6.1],
             "weather_code": [0, 61],
-            "et0_fao_evapotranspiration": [1.2, 1.5]
+            "et0_fao_evapotranspiration": [1.2, 1.5],
         },
         "city_code": "28079",
         "municipio_nombre": "Madrid",
-        "_metadata": {
-            "extraction_timestamp": "20260129_120000",
-            "execution_date": "2026-01-29"
-        }
+        "_metadata": {"extraction_timestamp": "20260129_120000", "execution_date": "2026-01-29"},
     }
 
 
@@ -96,14 +95,11 @@ def sample_openmeteo_hourly_response():
             "wind_speed_10m": [8.5, 9.2, 10.1],
             "wind_direction_10m": [180, 185, 190],
             "wind_gusts_10m": [15.2, 16.5, 17.8],
-            "weather_code": [2, 2, 3]
+            "weather_code": [2, 2, 3],
         },
         "city_code": "28079",
         "municipio_nombre": "Madrid",
-        "_metadata": {
-            "extraction_timestamp": "20260129_120000",
-            "execution_date": "2026-01-29"
-        }
+        "_metadata": {"extraction_timestamp": "20260129_120000", "execution_date": "2026-01-29"},
     }
 
 
@@ -123,8 +119,8 @@ def sample_air_quality_response():
             "sulphur_dioxide": [2.5, 2.3, 2.8],
             "ozone": [45.2, 44.8, 46.1],
             "aerosol_optical_depth": [0.15, 0.14, 0.16],
-            "dust": [5.2, 5.0, 5.5]
-        }
+            "dust": [5.2, 5.0, 5.5],
+        },
     }
 
 
@@ -142,8 +138,8 @@ def sample_pollen_response():
             "grass_pollen": [12.5, 13.2, 14.1],
             "mugwort_pollen": [0.0, 0.0, 0.0],
             "olive_pollen": [8.5, 8.8, 9.2],
-            "ragweed_pollen": [0.0, 0.0, 0.0]
-        }
+            "ragweed_pollen": [0.0, 0.0, 0.0],
+        },
     }
 
 
@@ -160,8 +156,8 @@ def sample_marine_response():
             "wave_direction_dominant": [180, 185, 190],
             "wave_period_max": [8.5, 8.8, 9.0],
             "wind_wave_height_max": [0.8, 0.9, 1.0],
-            "swell_wave_height_max": [1.2, 1.3, 1.4]
-        }
+            "swell_wave_height_max": [1.2, 1.3, 1.4],
+        },
     }
 
 
@@ -169,28 +165,30 @@ def sample_marine_response():
 def sample_cities():
     """Simulation of get_cities() from city_utils"""
     return [
-        {'name': 'Madrid', 'lat': 40.4168, 'lon': -3.7038},
-        {'name': 'Barcelona', 'lat': 41.3851, 'lon': 2.1734}
+        {"name": "Madrid", "lat": 40.4168, "lon": -3.7038},
+        {"name": "Barcelona", "lat": 41.3851, "lon": 2.1734},
     ]
 
 
 @pytest.fixture
 def sample_capitals_df():
     """Simulation of get_capitals_dataframe()"""
-    return pd.DataFrame([
-        {
-            'city_code': '28079',
-            'municipio_nombre': 'Madrid',
-            'latitude': 40.4168,
-            'longitude': -3.7038
-        },
-        {
-            'city_code': '08019',
-            'municipio_nombre': 'Barcelona',
-            'latitude': 41.3851,
-            'longitude': 2.1734
-        }
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "city_code": "28079",
+                "municipio_nombre": "Madrid",
+                "latitude": 40.4168,
+                "longitude": -3.7038,
+            },
+            {
+                "city_code": "08019",
+                "municipio_nombre": "Barcelona",
+                "latitude": 41.3851,
+                "longitude": 2.1734,
+            },
+        ]
+    )
 
 
 @pytest.fixture
@@ -207,54 +205,59 @@ def sample_github_csv():
 @pytest.fixture
 def sample_transformed_df():
     """Sample transformed weather DataFrame"""
-    return pd.DataFrame([
-        {
-            'city': 'Madrid',
-            'country': 'ES',
-            'latitude': 40.4168,
-            'longitude': -3.7038,
-            'temperature': 15.5,
-            'feels_like': 14.2,
-            'temp_min': 12.0,
-            'temp_max': 18.0,
-            'pressure': 1013,
-            'humidity': 65,
-            'weather_main': 'Clear',
-            'weather_description': 'clear sky',
-            'wind_speed': 3.5,
-            'wind_deg': 180,
-            'clouds': 10,
-            'visibility': 10000,
-            'date': '2026-01-29',
-            'bronze_source': 'current/2026-01-29/madrid_20260129_120000.json'
-        }
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "city": "Madrid",
+                "country": "ES",
+                "latitude": 40.4168,
+                "longitude": -3.7038,
+                "temperature": 15.5,
+                "feels_like": 14.2,
+                "temp_min": 12.0,
+                "temp_max": 18.0,
+                "pressure": 1013,
+                "humidity": 65,
+                "weather_main": "Clear",
+                "weather_description": "clear sky",
+                "wind_speed": 3.5,
+                "wind_deg": 180,
+                "clouds": 10,
+                "visibility": 10000,
+                "date": "2026-01-29",
+                "bronze_source": "current/2026-01-29/madrid_20260129_120000.json",
+            }
+        ]
+    )
 
 
 @pytest.fixture
 def sample_silver_parquet_df():
     """Sample Silver bucket DataFrame for loading tests"""
-    return pd.DataFrame([
-        {
-            'city_name': 'Madrid',
-            'time': '2026-01-29',
-            'temperature_2m_max': 18.5,
-            'temperature_2m_min': 8.3,
-            'precipitation_sum': 0.0,
-            'weather_code': 0
-        },
-        {
-            'city_name': 'Barcelona',
-            'time': '2026-01-29',
-            'temperature_2m_max': 19.2,
-            'temperature_2m_min': 9.1,
-            'precipitation_sum': 2.5,
-            'weather_code': 61
-        }
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "city_name": "Madrid",
+                "time": "2026-01-29",
+                "temperature_2m_max": 18.5,
+                "temperature_2m_min": 8.3,
+                "precipitation_sum": 0.0,
+                "weather_code": 0,
+            },
+            {
+                "city_name": "Barcelona",
+                "time": "2026-01-29",
+                "temperature_2m_max": 19.2,
+                "temperature_2m_min": 9.1,
+                "precipitation_sum": 2.5,
+                "weather_code": 61,
+            },
+        ]
+    )
 
 
 # ===== Mock Object Fixtures =====
+
 
 @pytest.fixture
 def mock_minio_client():
@@ -279,7 +282,7 @@ def mock_db_connection():
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_cursor.rowcount = 1
-    mock_cursor.fetchall.return_value = [('Madrid', 1), ('Barcelona', 2)]
+    mock_cursor.fetchall.return_value = [("Madrid", 1), ("Barcelona", 2)]
 
     # Make cursor() return the mock cursor
     mock_conn.cursor.return_value = mock_cursor
@@ -310,27 +313,24 @@ def mock_airflow_context():
     mock_ti.xcom_pull.return_value = None
     mock_ti.xcom_push.return_value = None
 
-    return {
-        'ds': '2026-01-29',
-        'execution_date': datetime(2026, 1, 29),
-        'task_instance': mock_ti
-    }
+    return {"ds": "2026-01-29", "execution_date": datetime(2026, 1, 29), "task_instance": mock_ti}
 
 
 # ===== Environment Setup =====
 
+
 @pytest.fixture(autouse=True)
 def setup_env(monkeypatch):
     """Setup environment variables automatically for all tests"""
-    monkeypatch.setenv('OPENWEATHER_API_KEY', 'test_api_key_12345')
-    monkeypatch.setenv('OPENMETEO_API_KEY', 'test_openmeteo_key')
-    monkeypatch.setenv('POSTGRES_USER', 'testuser')
-    monkeypatch.setenv('POSTGRES_PASSWORD', 'testpass')
-    monkeypatch.setenv('POSTGRES_DB', 'testdb')
-    monkeypatch.setenv('POSTGRES_HOST', 'localhost')
-    monkeypatch.setenv('MINIO_ENDPOINT', 'localhost:9000')
-    monkeypatch.setenv('MINIO_ROOT_USER', 'minioadmin')
-    monkeypatch.setenv('MINIO_ROOT_PASSWORD', 'minioadmin')
-    monkeypatch.setenv('MINIO_ACCESS_KEY', 'minioadmin')
-    monkeypatch.setenv('MINIO_SECRET_KEY', 'minioadmin')
-    monkeypatch.setenv('MINIO_SECURE', 'False')
+    monkeypatch.setenv("OPENWEATHER_API_KEY", "test_api_key_12345")
+    monkeypatch.setenv("OPENMETEO_API_KEY", "test_openmeteo_key")
+    monkeypatch.setenv("POSTGRES_USER", "testuser")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+    monkeypatch.setenv("POSTGRES_DB", "testdb")
+    monkeypatch.setenv("POSTGRES_HOST", "localhost")
+    monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
+    monkeypatch.setenv("MINIO_ROOT_USER", "minioadmin")
+    monkeypatch.setenv("MINIO_ROOT_PASSWORD", "minioadmin")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "minioadmin")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "minioadmin")
+    monkeypatch.setenv("MINIO_SECURE", "False")

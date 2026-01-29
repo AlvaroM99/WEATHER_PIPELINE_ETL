@@ -2,26 +2,28 @@
 Unit tests for Debug Utilities module
 Tests diagnostic and debugging tools
 """
-import pytest
-import pandas as pd
+
 import logging
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pandas as pd
+import pytest
 
 from src.weather_utils.debug_utils import (
-    setup_debug_logging,
-    timing_decorator,
-    validate_dataframe,
-    inspect_json_structure,
-    compare_dataframes,
-    trace_exception,
     check_minio_connectivity,
     check_postgres_connectivity,
-    generate_diagnostic_report
+    compare_dataframes,
+    generate_diagnostic_report,
+    inspect_json_structure,
+    setup_debug_logging,
+    timing_decorator,
+    trace_exception,
+    validate_dataframe,
 )
 
-
 # ===== Logging Tests =====
+
 
 @pytest.mark.unit
 def test_setup_debug_logging_default():
@@ -52,9 +54,11 @@ def test_setup_debug_logging_warning_level():
 
 # ===== Timing Decorator Tests =====
 
+
 @pytest.mark.unit
 def test_timing_decorator_success():
     """Test timing decorator logs execution time"""
+
     @timing_decorator
     def test_func():
         return "success"
@@ -67,6 +71,7 @@ def test_timing_decorator_success():
 @pytest.mark.unit
 def test_timing_decorator_with_exception():
     """Test timing decorator handles exceptions"""
+
     @timing_decorator
     def failing_func():
         raise ValueError("Test error")
@@ -78,6 +83,7 @@ def test_timing_decorator_with_exception():
 @pytest.mark.unit
 def test_timing_decorator_preserves_function_name():
     """Test timing decorator preserves function metadata"""
+
     @timing_decorator
     def my_named_function():
         pass
@@ -87,15 +93,13 @@ def test_timing_decorator_preserves_function_name():
 
 # ===== DataFrame Validation Tests =====
 
+
 @pytest.mark.unit
 def test_validate_dataframe_valid():
     """Test validation of valid DataFrame"""
-    df = pd.DataFrame({
-        'city': ['Madrid', 'Barcelona'],
-        'temperature': [20.5, 18.3]
-    })
+    df = pd.DataFrame({"city": ["Madrid", "Barcelona"], "temperature": [20.5, 18.3]})
 
-    result = validate_dataframe(df, ['city', 'temperature'], "test_df")
+    result = validate_dataframe(df, ["city", "temperature"], "test_df")
 
     assert result["valid"] is True
     assert result["name"] == "test_df"
@@ -106,11 +110,9 @@ def test_validate_dataframe_valid():
 @pytest.mark.unit
 def test_validate_dataframe_missing_columns():
     """Test validation catches missing columns"""
-    df = pd.DataFrame({
-        'city': ['Madrid', 'Barcelona']
-    })
+    df = pd.DataFrame({"city": ["Madrid", "Barcelona"]})
 
-    result = validate_dataframe(df, ['city', 'temperature'], "test_df")
+    result = validate_dataframe(df, ["city", "temperature"], "test_df")
 
     assert result["valid"] is False
     assert any("Missing columns" in issue for issue in result["issues"])
@@ -121,7 +123,7 @@ def test_validate_dataframe_empty():
     """Test validation catches empty DataFrame"""
     df = pd.DataFrame()
 
-    result = validate_dataframe(df, ['city'], "empty_df")
+    result = validate_dataframe(df, ["city"], "empty_df")
 
     assert result["valid"] is False
     assert any("empty" in issue.lower() for issue in result["issues"])
@@ -130,7 +132,7 @@ def test_validate_dataframe_empty():
 @pytest.mark.unit
 def test_validate_dataframe_none():
     """Test validation handles None DataFrame"""
-    result = validate_dataframe(None, ['city'], "null_df")
+    result = validate_dataframe(None, ["city"], "null_df")
 
     assert result["valid"] is False
     assert any("None" in issue for issue in result["issues"])
@@ -139,17 +141,15 @@ def test_validate_dataframe_none():
 @pytest.mark.unit
 def test_validate_dataframe_high_null_ratio():
     """Test validation warns about high null ratios"""
-    df = pd.DataFrame({
-        'city': ['Madrid', None, None, None],
-        'temp': [20.0, 18.0, 22.0, 15.0]
-    })
+    df = pd.DataFrame({"city": ["Madrid", None, None, None], "temp": [20.0, 18.0, 22.0, 15.0]})
 
-    result = validate_dataframe(df, ['city', 'temp'], "null_df")
+    result = validate_dataframe(df, ["city", "temp"], "null_df")
 
     assert any("null values" in issue for issue in result["issues"])
 
 
 # ===== JSON Structure Inspection Tests =====
+
 
 @pytest.mark.unit
 def test_inspect_json_structure_simple():
@@ -169,7 +169,7 @@ def test_inspect_json_structure_nested():
     data = {
         "city": "Madrid",
         "weather": {"main": "Clear", "description": "clear sky"},
-        "coord": {"lat": 40.4, "lon": -3.7}
+        "coord": {"lat": 40.4, "lon": -3.7},
     }
 
     result = inspect_json_structure(data, max_depth=2)
@@ -181,12 +181,7 @@ def test_inspect_json_structure_nested():
 @pytest.mark.unit
 def test_inspect_json_structure_with_list():
     """Test inspection of JSON with lists"""
-    data = {
-        "cities": [
-            {"name": "Madrid"},
-            {"name": "Barcelona"}
-        ]
-    }
+    data = {"cities": [{"name": "Madrid"}, {"name": "Barcelona"}]}
 
     result = inspect_json_structure(data)
 
@@ -207,11 +202,12 @@ def test_inspect_json_structure_max_depth():
 
 # ===== DataFrame Comparison Tests =====
 
+
 @pytest.mark.unit
 def test_compare_dataframes_identical():
     """Test comparison of identical DataFrames"""
-    df1 = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
-    df2 = pd.DataFrame({'a': [5, 6], 'b': [7, 8]})
+    df1 = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    df2 = pd.DataFrame({"a": [5, 6], "b": [7, 8]})
 
     result = compare_dataframes(df1, df2, "first", "second")
 
@@ -223,20 +219,20 @@ def test_compare_dataframes_identical():
 @pytest.mark.unit
 def test_compare_dataframes_different_columns():
     """Test comparison with different columns"""
-    df1 = pd.DataFrame({'a': [1], 'b': [2]})
-    df2 = pd.DataFrame({'b': [3], 'c': [4]})
+    df1 = pd.DataFrame({"a": [1], "b": [2]})
+    df2 = pd.DataFrame({"b": [3], "c": [4]})
 
     result = compare_dataframes(df1, df2)
 
-    assert 'a' in result["columns"]["only_in_df1"]
-    assert 'c' in result["columns"]["only_in_df2"]
-    assert 'b' in result["columns"]["common"]
+    assert "a" in result["columns"]["only_in_df1"]
+    assert "c" in result["columns"]["only_in_df2"]
+    assert "b" in result["columns"]["common"]
 
 
 @pytest.mark.unit
 def test_compare_dataframes_with_none():
     """Test comparison handles None DataFrame"""
-    df1 = pd.DataFrame({'a': [1]})
+    df1 = pd.DataFrame({"a": [1]})
 
     result = compare_dataframes(df1, None)
 
@@ -246,15 +242,16 @@ def test_compare_dataframes_with_none():
 @pytest.mark.unit
 def test_compare_dataframes_dtype_differences():
     """Test comparison detects dtype differences"""
-    df1 = pd.DataFrame({'a': [1, 2, 3]})  # int
-    df2 = pd.DataFrame({'a': [1.0, 2.0, 3.0]})  # float
+    df1 = pd.DataFrame({"a": [1, 2, 3]})  # int
+    df2 = pd.DataFrame({"a": [1.0, 2.0, 3.0]})  # float
 
     result = compare_dataframes(df1, df2)
 
-    assert 'a' in result["dtype_differences"]
+    assert "a" in result["dtype_differences"]
 
 
 # ===== Exception Tracing Tests =====
+
 
 @pytest.mark.unit
 def test_trace_exception_basic():
@@ -285,6 +282,7 @@ def test_trace_exception_traceback_content():
 
 # ===== MinIO Connectivity Tests =====
 
+
 @pytest.mark.unit
 def test_check_minio_connectivity_success():
     """Test successful MinIO connectivity check"""
@@ -306,9 +304,7 @@ def test_check_minio_connectivity_success():
 
     try:
         result = check_minio_connectivity(
-            endpoint="localhost:9000",
-            access_key="test",
-            secret_key="test"
+            endpoint="localhost:9000", access_key="test", secret_key="test"
         )
 
         assert result["connected"] is True
@@ -332,9 +328,7 @@ def test_check_minio_connectivity_failure():
 
     try:
         result = check_minio_connectivity(
-            endpoint="invalid:9000",
-            access_key="test",
-            secret_key="test"
+            endpoint="invalid:9000", access_key="test", secret_key="test"
         )
 
         assert result["connected"] is False
@@ -344,6 +338,7 @@ def test_check_minio_connectivity_failure():
 
 
 # ===== PostgreSQL Connectivity Tests =====
+
 
 @pytest.mark.unit
 def test_check_postgres_connectivity_success():
@@ -365,11 +360,7 @@ def test_check_postgres_connectivity_success():
 
     try:
         result = check_postgres_connectivity(
-            host="localhost",
-            port=5432,
-            database="weather",
-            user="test",
-            password="test"
+            host="localhost", port=5432, database="weather", user="test", password="test"
         )
 
         assert result["connected"] is True
@@ -395,11 +386,7 @@ def test_check_postgres_connectivity_failure():
 
     try:
         result = check_postgres_connectivity(
-            host="invalid",
-            port=5432,
-            database="weather",
-            user="test",
-            password="test"
+            host="invalid", port=5432, database="weather", user="test", password="test"
         )
 
         assert result["connected"] is False
@@ -410,9 +397,10 @@ def test_check_postgres_connectivity_failure():
 
 # ===== Diagnostic Report Tests =====
 
+
 @pytest.mark.unit
-@patch('src.weather_utils.debug_utils.check_minio_connectivity')
-@patch('src.weather_utils.debug_utils.check_postgres_connectivity')
+@patch("src.weather_utils.debug_utils.check_minio_connectivity")
+@patch("src.weather_utils.debug_utils.check_postgres_connectivity")
 def test_generate_diagnostic_report(mock_postgres, mock_minio):
     """Test diagnostic report generation"""
     mock_minio.return_value = {"connected": True}
@@ -427,8 +415,8 @@ def test_generate_diagnostic_report(mock_postgres, mock_minio):
 
 
 @pytest.mark.unit
-@patch('src.weather_utils.debug_utils.check_minio_connectivity')
-@patch('src.weather_utils.debug_utils.check_postgres_connectivity')
+@patch("src.weather_utils.debug_utils.check_minio_connectivity")
+@patch("src.weather_utils.debug_utils.check_postgres_connectivity")
 def test_generate_diagnostic_report_skip_checks(mock_postgres, mock_minio):
     """Test diagnostic report without connectivity checks"""
     result = generate_diagnostic_report(include_minio=False, include_postgres=False)
@@ -444,8 +432,10 @@ def test_generate_diagnostic_report_env_vars(monkeypatch):
     """Test diagnostic report captures environment variables"""
     monkeypatch.setenv("OPENWEATHER_API_KEY", "test_key")
 
-    with patch('src.weather_utils.debug_utils.check_minio_connectivity'), \
-         patch('src.weather_utils.debug_utils.check_postgres_connectivity'):
+    with (
+        patch("src.weather_utils.debug_utils.check_minio_connectivity"),
+        patch("src.weather_utils.debug_utils.check_postgres_connectivity"),
+    ):
         result = generate_diagnostic_report()
 
     env_vars = result["environment"]["required_env_vars"]

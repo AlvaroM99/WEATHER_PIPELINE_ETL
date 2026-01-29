@@ -40,7 +40,6 @@ extend-exclude = '''
     | build
     | dist
     | migrations
-    | dags
 )/
 '''
 
@@ -56,7 +55,7 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 skip_gitignore = true
-skip = [".git", "__pycache__", ".venv", "venv", "htmlcov", "dags"]
+skip = [".git", "__pycache__", ".venv", "venv", "htmlcov"]
 known_first_party = ["src"]
 known_third_party = ["pandas", "requests", "minio", "psycopg2", "dotenv", "pyarrow", "great_expectations"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
@@ -76,7 +75,6 @@ exclude = [
     "htmlcov",
     "build",
     "dist",
-    "dags",
     "tests"
 ]
 
@@ -168,8 +166,7 @@ exclude = [
     "venv",
     "htmlcov",
     "build",
-    "dist",
-    "dags"
+    "dist"
 ]
 
 [tool.ruff.lint]

@@ -5,11 +5,11 @@ Tracks quality metrics over time and provides reporting capabilities
 for monitoring data pipeline health.
 """
 
+import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
-import json
 
 import pandas as pd
 
@@ -29,12 +29,12 @@ class QualityMetric:
 
     def to_dict(self) -> Dict:
         return {
-            'metric_name': self.metric_name,
-            'value': self.value,
-            'timestamp': self.timestamp.isoformat(),
-            'table_name': self.table_name,
-            'dimension': self.dimension,
-            'metadata': self.metadata
+            "metric_name": self.metric_name,
+            "value": self.value,
+            "timestamp": self.timestamp.isoformat(),
+            "table_name": self.table_name,
+            "dimension": self.dimension,
+            "metadata": self.metadata,
         }
 
 
@@ -53,14 +53,16 @@ class QualityReport:
 
     def to_dict(self) -> Dict:
         return {
-            'report_id': self.report_id,
-            'generated_at': self.generated_at.isoformat(),
-            'table_name': self.table_name,
-            'overall_score': self.overall_score,
-            'dimension_scores': self.dimension_scores,
-            'metrics': [m.to_dict() for m in self.metrics],
-            'validation_result': self.validation_result.to_dict() if self.validation_result else None,
-            'recommendations': self.recommendations
+            "report_id": self.report_id,
+            "generated_at": self.generated_at.isoformat(),
+            "table_name": self.table_name,
+            "overall_score": self.overall_score,
+            "dimension_scores": self.dimension_scores,
+            "metrics": [m.to_dict() for m in self.metrics],
+            "validation_result": (
+                self.validation_result.to_dict() if self.validation_result else None
+            ),
+            "recommendations": self.recommendations,
         }
 
     def to_json(self) -> str:
@@ -83,9 +85,7 @@ class DataQualityMetrics:
         self._metrics_history: List[QualityMetric] = []
 
     def calculate_completeness(
-        self,
-        df: pd.DataFrame,
-        columns: Optional[List[str]] = None
+        self, df: pd.DataFrame, columns: Optional[List[str]] = None
     ) -> Dict[str, float]:
         """
         Calculate completeness score for each column.
@@ -112,11 +112,7 @@ class DataQualityMetrics:
 
         return scores
 
-    def calculate_validity(
-        self,
-        df: pd.DataFrame,
-        validation_result: ValidationResult
-    ) -> float:
+    def calculate_validity(self, df: pd.DataFrame, validation_result: ValidationResult) -> float:
         """
         Calculate validity score based on validation results.
 
@@ -134,11 +130,7 @@ class DataQualityMetrics:
 
         return validation_result.successful_expectations / validation_result.total_expectations
 
-    def calculate_uniqueness(
-        self,
-        df: pd.DataFrame,
-        key_columns: List[str]
-    ) -> float:
+    def calculate_uniqueness(self, df: pd.DataFrame, key_columns: List[str]) -> float:
         """
         Calculate uniqueness score for key columns.
 
@@ -161,10 +153,7 @@ class DataQualityMetrics:
         return unique_count / len(df)
 
     def calculate_freshness(
-        self,
-        df: pd.DataFrame,
-        timestamp_column: str,
-        max_age_hours: float = 24.0
+        self, df: pd.DataFrame, timestamp_column: str, max_age_hours: float = 24.0
     ) -> float:
         """
         Calculate data freshness score.
@@ -208,11 +197,7 @@ class DataQualityMetrics:
             return 0.0
 
     def calculate_range_conformity(
-        self,
-        df: pd.DataFrame,
-        column: str,
-        min_value: float,
-        max_value: float
+        self, df: pd.DataFrame, column: str, min_value: float, max_value: float
     ) -> float:
         """
         Calculate what percentage of values fall within expected range.
@@ -242,7 +227,7 @@ class DataQualityMetrics:
         table_name: str,
         validation_result: ValidationResult,
         key_columns: Optional[List[str]] = None,
-        timestamp_column: Optional[str] = None
+        timestamp_column: Optional[str] = None,
     ) -> QualityReport:
         """
         Generate a comprehensive quality report.
@@ -262,63 +247,70 @@ class DataQualityMetrics:
 
         # Completeness
         completeness_scores = self.calculate_completeness(df)
-        avg_completeness = sum(completeness_scores.values()) / len(completeness_scores) if completeness_scores else 0.0
-        dimension_scores['completeness'] = avg_completeness
+        avg_completeness = (
+            sum(completeness_scores.values()) / len(completeness_scores)
+            if completeness_scores
+            else 0.0
+        )
+        dimension_scores["completeness"] = avg_completeness
 
         for col, score in completeness_scores.items():
-            metrics.append(QualityMetric(
-                metric_name=f"completeness_{col}",
-                value=score,
-                table_name=table_name,
-                dimension='completeness'
-            ))
+            metrics.append(
+                QualityMetric(
+                    metric_name=f"completeness_{col}",
+                    value=score,
+                    table_name=table_name,
+                    dimension="completeness",
+                )
+            )
 
         # Validity
         validity = self.calculate_validity(df, validation_result)
-        dimension_scores['validity'] = validity
-        metrics.append(QualityMetric(
-            metric_name="validity_score",
-            value=validity,
-            table_name=table_name,
-            dimension='validity',
-            metadata={
-                'total_expectations': validation_result.total_expectations,
-                'passed': validation_result.successful_expectations,
-                'failed': validation_result.failed_expectations
-            }
-        ))
+        dimension_scores["validity"] = validity
+        metrics.append(
+            QualityMetric(
+                metric_name="validity_score",
+                value=validity,
+                table_name=table_name,
+                dimension="validity",
+                metadata={
+                    "total_expectations": validation_result.total_expectations,
+                    "passed": validation_result.successful_expectations,
+                    "failed": validation_result.failed_expectations,
+                },
+            )
+        )
 
         # Uniqueness
         if key_columns:
             uniqueness = self.calculate_uniqueness(df, key_columns)
-            dimension_scores['uniqueness'] = uniqueness
-            metrics.append(QualityMetric(
-                metric_name="uniqueness_score",
-                value=uniqueness,
-                table_name=table_name,
-                dimension='uniqueness',
-                metadata={'key_columns': key_columns}
-            ))
+            dimension_scores["uniqueness"] = uniqueness
+            metrics.append(
+                QualityMetric(
+                    metric_name="uniqueness_score",
+                    value=uniqueness,
+                    table_name=table_name,
+                    dimension="uniqueness",
+                    metadata={"key_columns": key_columns},
+                )
+            )
 
         # Freshness
         if timestamp_column:
             freshness = self.calculate_freshness(df, timestamp_column)
-            dimension_scores['freshness'] = freshness
-            metrics.append(QualityMetric(
-                metric_name="freshness_score",
-                value=freshness,
-                table_name=table_name,
-                dimension='freshness',
-                metadata={'timestamp_column': timestamp_column}
-            ))
+            dimension_scores["freshness"] = freshness
+            metrics.append(
+                QualityMetric(
+                    metric_name="freshness_score",
+                    value=freshness,
+                    table_name=table_name,
+                    dimension="freshness",
+                    metadata={"timestamp_column": timestamp_column},
+                )
+            )
 
         # Calculate overall score (weighted average)
-        weights = {
-            'completeness': 0.3,
-            'validity': 0.35,
-            'uniqueness': 0.2,
-            'freshness': 0.15
-        }
+        weights = {"completeness": 0.3, "validity": 0.35, "uniqueness": 0.2, "freshness": 0.15}
 
         overall_score = 0.0
         total_weight = 0.0
@@ -348,20 +340,20 @@ class DataQualityMetrics:
             dimension_scores=dimension_scores,
             metrics=metrics,
             validation_result=validation_result,
-            recommendations=recommendations
+            recommendations=recommendations,
         )
 
     def _generate_recommendations(
         self,
         dimension_scores: Dict[str, float],
         validation_result: ValidationResult,
-        completeness_scores: Dict[str, float]
+        completeness_scores: Dict[str, float],
     ) -> List[str]:
         """Generate recommendations based on quality scores."""
         recommendations = []
 
         # Completeness recommendations
-        if dimension_scores.get('completeness', 1.0) < 0.9:
+        if dimension_scores.get("completeness", 1.0) < 0.9:
             low_completeness = [col for col, score in completeness_scores.items() if score < 0.9]
             if low_completeness:
                 recommendations.append(
@@ -369,38 +361,30 @@ class DataQualityMetrics:
                 )
 
         # Validity recommendations
-        if dimension_scores.get('validity', 1.0) < 0.95:
+        if dimension_scores.get("validity", 1.0) < 0.95:
             if validation_result.failed_details:
-                failed_types = set(d['expectation_type'] for d in validation_result.failed_details[:3])
-                recommendations.append(
-                    f"Address validation failures: {', '.join(failed_types)}"
+                failed_types = set(
+                    d["expectation_type"] for d in validation_result.failed_details[:3]
                 )
+                recommendations.append(f"Address validation failures: {', '.join(failed_types)}")
 
         # Uniqueness recommendations
-        if dimension_scores.get('uniqueness', 1.0) < 1.0:
-            recommendations.append(
-                "Investigate and remove duplicate records before loading"
-            )
+        if dimension_scores.get("uniqueness", 1.0) < 1.0:
+            recommendations.append("Investigate and remove duplicate records before loading")
 
         # Freshness recommendations
-        if dimension_scores.get('freshness', 1.0) < 0.5:
-            recommendations.append(
-                "Data is stale - check extraction pipeline for delays"
-            )
+        if dimension_scores.get("freshness", 1.0) < 0.5:
+            recommendations.append("Data is stale - check extraction pipeline for delays")
 
         # Overall quality
         overall = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0
         if overall < 0.8:
-            recommendations.append(
-                "Overall data quality is below threshold - review data sources"
-            )
+            recommendations.append("Overall data quality is below threshold - review data sources")
 
         return recommendations
 
     def get_metrics_summary(
-        self,
-        table_name: Optional[str] = None,
-        dimension: Optional[str] = None
+        self, table_name: Optional[str] = None, dimension: Optional[str] = None
     ) -> pd.DataFrame:
         """
         Get summary of collected metrics.
@@ -419,17 +403,14 @@ class DataQualityMetrics:
         df = pd.DataFrame(metrics_data)
 
         if table_name:
-            df = df[df['table_name'] == table_name]
+            df = df[df["table_name"] == table_name]
         if dimension:
-            df = df[df['dimension'] == dimension]
+            df = df[df["dimension"] == dimension]
 
         return df
 
     def detect_anomalies(
-        self,
-        table_name: str,
-        metric_name: str,
-        threshold_std: float = 2.0
+        self, table_name: str, metric_name: str, threshold_std: float = 2.0
     ) -> List[QualityMetric]:
         """
         Detect anomalies in metric values using standard deviation.
@@ -443,7 +424,8 @@ class DataQualityMetrics:
             List of anomalous metrics
         """
         relevant_metrics = [
-            m for m in self._metrics_history
+            m
+            for m in self._metrics_history
             if m.table_name == table_name and m.metric_name == metric_name
         ]
 
@@ -453,7 +435,7 @@ class DataQualityMetrics:
         values = [m.value for m in relevant_metrics]
         mean = sum(values) / len(values)
         variance = sum((v - mean) ** 2 for v in values) / len(values)
-        std = variance ** 0.5
+        std = variance**0.5
 
         if std == 0:
             return []
