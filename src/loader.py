@@ -588,9 +588,7 @@ class Loader:
             table_name="fct_pollen",
         )
 
-    def _map_pollen(
-        self, row: pd.Series, city_id: int, extraction_date_id: int
-    ) -> RecordTuple:
+    def _map_pollen(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a pollen row to a database record tuple."""
 
         def g(k: str) -> Optional[Any]:
@@ -639,9 +637,7 @@ class Loader:
             table_name="fct_marine",
         )
 
-    def _map_marine(
-        self, row: pd.Series, city_id: int, extraction_date_id: int
-    ) -> RecordTuple:
+    def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""
 
         def g(k: str) -> Optional[float]:

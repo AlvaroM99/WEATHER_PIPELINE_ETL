@@ -193,7 +193,9 @@ class Extractor:
                     "execution_date": execution_date,
                 }
 
-                object_path: str = f"forecast/daily/{execution_date}/weather_daily_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                object_path: str = (
+                    f"forecast/daily/{execution_date}/weather_daily_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
                 file_size: int = self.minio_client.upload_json(
                     BRONZE_OPENMETEO_BUCKET, object_path, data
                 )
@@ -262,7 +264,9 @@ class Extractor:
                     "execution_date": execution_date,
                 }
 
-                object_path: str = f"forecast/hourly/{execution_date}/weather_hourly_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                object_path: str = (
+                    f"forecast/hourly/{execution_date}/weather_hourly_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
                 file_size: int = self.minio_client.upload_json(
                     BRONZE_OPENMETEO_BUCKET, object_path, data
                 )
@@ -331,7 +335,9 @@ class Extractor:
                     "execution_date": execution_date,
                 }
 
-                object_path: str = f"air_quality/{execution_date}/air_quality_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                object_path: str = (
+                    f"air_quality/{execution_date}/air_quality_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
                 self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
                 uploaded_objects.append(
                     {"object_path": object_path, "city": city["municipio_nombre"]}
@@ -396,7 +402,9 @@ class Extractor:
                     "execution_date": execution_date,
                 }
 
-                object_path: str = f"pollen/{execution_date}/pollen_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                object_path: str = (
+                    f"pollen/{execution_date}/pollen_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
                 self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
                 uploaded_objects.append(
                     {"object_path": object_path, "city": city["municipio_nombre"]}
@@ -462,7 +470,9 @@ class Extractor:
                     "execution_date": execution_date,
                 }
 
-                object_path: str = f"marine/{execution_date}/marine_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                object_path: str = (
+                    f"marine/{execution_date}/marine_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
                 self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
                 uploaded_objects.append(
                     {"object_path": object_path, "city": city["municipio_nombre"]}
