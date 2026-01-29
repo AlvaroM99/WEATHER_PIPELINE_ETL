@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 from io import StringIO
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import psycopg2
