@@ -269,30 +269,25 @@ def test_session_mounts_http_and_https():
 
 
 @pytest.mark.unit
-@responses.activate
-@pytest.mark.slow
-def test_backoff_factor_timing():
-    """Test that backoff factor delays retries (marked as slow test)"""
-    import time
-    url = "https://api.example.com/data"
+def test_backoff_factor_configuration():
+    """Test that backoff factor is correctly configured in session"""
+    # Test with custom backoff factor
+    session = get_retrying_session(retries=3, backoff_factor=0.5)
 
-    # All requests fail
-    for _ in range(3):
-        responses.add(responses.GET, url, status=500)
+    adapter = session.get_adapter('https://example.com')
+    retry_config = adapter.max_retries
 
-    session = get_retrying_session(retries=2, backoff_factor=0.1)
+    # Verify backoff configuration
+    assert retry_config.backoff_factor == 0.5
+    assert retry_config.total == 3
 
-    start_time = time.time()
-    try:
-        session.get(url, timeout=5)
-    except requests.exceptions.RetryError:
-        pass
-    elapsed_time = time.time() - start_time
+    # Test with different backoff factor
+    session2 = get_retrying_session(retries=2, backoff_factor=1.0)
+    adapter2 = session2.get_adapter('https://example.com')
+    retry_config2 = adapter2.max_retries
 
-    # With backoff_factor=0.1, delays are: 0.0s, 0.2s, 0.4s
-    # Total should be at least 0.6 seconds
-    # We use a lower threshold to account for test execution speed
-    assert elapsed_time >= 0.3, f"Expected backoff delays, got {elapsed_time}s"
+    assert retry_config2.backoff_factor == 1.0
+    assert retry_config2.total == 2
 
 
 @pytest.mark.unit

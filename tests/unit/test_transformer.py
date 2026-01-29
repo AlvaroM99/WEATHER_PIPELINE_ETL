@@ -479,3 +479,365 @@ def test_transform_generic_handles_missing_data_key(MockMinIOClass):
 
     # Assert - should return 0 when no valid data
     assert result == 0
+
+
+# ===== Open-Meteo Hourly Transformation Tests =====
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_openmeteo_hourly_success(
+    MockMinIOClass,
+    sample_openmeteo_hourly_response,
+    mock_airflow_context
+):
+    """Test successful Open-Meteo hourly transformation"""
+    mock_minio_instance = Mock()
+
+    bronze_objects = [{'object_path': 'forecast/hourly/2026-01-29/madrid.json'}]
+    mock_minio_instance.read_json.return_value = sample_openmeteo_hourly_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context['task_instance'].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_hourly(**mock_airflow_context)
+
+    assert result > 0
+    assert mock_minio_instance.upload_parquet.called
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert 'time' in df.columns
+    assert 'temperature_2m' in df.columns
+    assert 'city_code' in df.columns
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_openmeteo_hourly_multiple_records(
+    MockMinIOClass,
+    sample_openmeteo_hourly_response
+):
+    """Test hourly transformation creates one row per hour"""
+    mock_minio_instance = Mock()
+
+    bronze_objects = [{'object_path': 'forecast/hourly/2026-01-29/madrid.json'}]
+    mock_minio_instance.read_json.return_value = sample_openmeteo_hourly_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = bronze_objects
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_hourly(ds='2026-01-29', task_instance=mock_ti)
+
+    # Sample has 3 hourly entries
+    assert result == 3
+
+
+# ===== Open-Meteo Air Quality Transformation Tests =====
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_air_quality_success(
+    MockMinIOClass,
+    sample_air_quality_response,
+    mock_airflow_context
+):
+    """Test successful air quality transformation"""
+    mock_minio_instance = Mock()
+
+    sample_air_quality_response['city_code'] = '28079'
+    sample_air_quality_response['municipio_nombre'] = 'Madrid'
+    sample_air_quality_response['_metadata'] = {
+        'extraction_timestamp': '20260129_120000',
+        'execution_date': '2026-01-29'
+    }
+
+    bronze_objects = [{'object_path': 'air_quality/2026-01-29/madrid.json'}]
+    mock_minio_instance.read_json.return_value = sample_air_quality_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context['task_instance'].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_air_quality(**mock_airflow_context)
+
+    assert result > 0
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert 'pm10' in df.columns
+    assert 'pm2_5' in df.columns
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_air_quality_columns(MockMinIOClass, sample_air_quality_response):
+    """Test air quality transformation preserves all pollutant columns"""
+    mock_minio_instance = Mock()
+
+    sample_air_quality_response['city_code'] = '28079'
+    sample_air_quality_response['municipio_nombre'] = 'Madrid'
+    sample_air_quality_response['_metadata'] = {}
+
+    bronze_objects = [{'object_path': 'air_quality/2026-01-29/madrid.json'}]
+    mock_minio_instance.read_json.return_value = sample_air_quality_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = bronze_objects
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_air_quality(ds='2026-01-29', task_instance=mock_ti)
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    expected_pollutants = ['pm10', 'pm2_5', 'carbon_monoxide', 'nitrogen_dioxide']
+    for col in expected_pollutants:
+        assert col in df.columns, f"Missing pollutant column: {col}"
+
+
+# ===== Open-Meteo Pollen Transformation Tests =====
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_pollen_success(
+    MockMinIOClass,
+    sample_pollen_response,
+    mock_airflow_context
+):
+    """Test successful pollen transformation"""
+    mock_minio_instance = Mock()
+
+    sample_pollen_response['city_code'] = '28079'
+    sample_pollen_response['municipio_nombre'] = 'Madrid'
+    sample_pollen_response['_metadata'] = {
+        'extraction_timestamp': '20260129_120000'
+    }
+
+    bronze_objects = [{'object_path': 'pollen/2026-01-29/madrid.json'}]
+    mock_minio_instance.read_json.return_value = sample_pollen_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context['task_instance'].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_pollen(**mock_airflow_context)
+
+    assert result > 0
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert 'grass_pollen' in df.columns
+    assert 'birch_pollen' in df.columns
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_pollen_no_data(MockMinIOClass):
+    """Test pollen transformation with no data"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_pollen(ds='2026-01-29', task_instance=None)
+
+    assert result == 0
+
+
+# ===== Open-Meteo Marine Transformation Tests =====
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_marine_success(
+    MockMinIOClass,
+    sample_marine_response,
+    mock_airflow_context
+):
+    """Test successful marine transformation"""
+    mock_minio_instance = Mock()
+
+    sample_marine_response['city_code'] = '08019'
+    sample_marine_response['municipio_nombre'] = 'Barcelona'
+    sample_marine_response['_metadata'] = {
+        'extraction_timestamp': '20260129_120000'
+    }
+
+    bronze_objects = [{'object_path': 'marine/2026-01-29/barcelona.json'}]
+    mock_minio_instance.read_json.return_value = sample_marine_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context['task_instance'].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_marine(**mock_airflow_context)
+
+    assert result > 0
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert 'wave_height_max' in df.columns
+    assert 'city_name' in df.columns
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_marine_coastal_city_data(MockMinIOClass, sample_marine_response):
+    """Test marine transformation for coastal city"""
+    mock_minio_instance = Mock()
+
+    sample_marine_response['city_code'] = '08019'
+    sample_marine_response['municipio_nombre'] = 'Barcelona'
+    sample_marine_response['_metadata'] = {}
+
+    bronze_objects = [{'object_path': 'marine/2026-01-29/barcelona.json'}]
+    mock_minio_instance.read_json.return_value = sample_marine_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = bronze_objects
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_marine(ds='2026-01-29', task_instance=mock_ti)
+
+    assert result == 3  # 3 hourly entries
+
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert df['city_name'].iloc[0] == 'Barcelona'
+
+
+# ===== Additional Edge Cases =====
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_openweather_missing_metadata(MockMinIOClass, sample_openweather_response):
+    """Test transformation handles missing _metadata gracefully"""
+    mock_minio_instance = Mock()
+
+    # Remove metadata
+    if '_metadata' in sample_openweather_response:
+        del sample_openweather_response['_metadata']
+
+    bronze_objects = [{'object_path': 'current/2026-01-29/test.json'}]
+    mock_minio_instance.read_json.return_value = sample_openweather_response
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = bronze_objects
+
+    transformer = Transformer()
+    result = transformer.transform_openweather(ds='2026-01-29', task_instance=mock_ti)
+
+    # Should still work with defaults
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_generic_exception_handling(MockMinIOClass):
+    """Test _transform_generic handles exceptions in individual records"""
+    mock_minio_instance = Mock()
+
+    # First read succeeds, second throws exception
+    mock_minio_instance.read_json.side_effect = [
+        {'hourly': {'time': ['2026-01-29T00:00'], 'temp': [20]}, 'city_code': '1', 'municipio_nombre': 'City1'},
+        Exception("Read error")
+    ]
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = [
+        {'object_path': 'forecast/hourly/2026-01-29/city1.json'},
+        {'object_path': 'forecast/hourly/2026-01-29/city2.json'}
+    ]
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_hourly(ds='2026-01-29', task_instance=mock_ti)
+
+    # Should process the successful record
+    assert result == 1
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_transform_with_empty_object_path(MockMinIOClass):
+    """Test transformation skips records with empty object_path"""
+    mock_minio_instance = Mock()
+
+    mock_minio_instance.read_json.return_value = {
+        'hourly': {'time': ['2026-01-29T00:00'], 'temp': [20]},
+        'city_code': '1',
+        'municipio_nombre': 'City1'
+    }
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = [
+        {'object_path': ''},  # Empty path
+        {'object_path': None},  # None path
+        {'object_path': 'forecast/hourly/2026-01-29/valid.json'}
+    ]
+
+    transformer = Transformer()
+    result = transformer.transform_openmeteo_hourly(ds='2026-01-29', task_instance=mock_ti)
+
+    # Only valid path should be processed
+    assert mock_minio_instance.read_json.call_count == 1
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_get_upstream_data_helper(MockMinIOClass):
+    """Test _get_upstream_data helper method"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    mock_ti = Mock()
+    mock_ti.xcom_pull.return_value = [{'object_path': 'test.json'}]
+
+    context = {'task_instance': mock_ti}
+
+    result = transformer._get_upstream_data(context, ['task1', 'task2'], 'key')
+
+    assert result is not None
+
+
+@pytest.mark.unit
+@patch('src.transformer.MinIOClient')
+def test_get_upstream_data_no_task_instance(MockMinIOClass):
+    """Test _get_upstream_data returns None without task_instance"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    result = transformer._get_upstream_data({}, ['task1'], 'key')
+
+    assert result is None

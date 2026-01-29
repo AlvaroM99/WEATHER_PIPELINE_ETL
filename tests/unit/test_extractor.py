@@ -498,3 +498,647 @@ def test_extractor_initialization(MockMinIOClass):
     assert extractor.logger is not None
     assert extractor.minio_client is not None
     assert extractor.session is not None
+
+
+# ===== Open-Meteo Hourly Tests =====
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_openmeteo_hourly_success(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_openmeteo_hourly_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test successful Open-Meteo hourly forecast extraction"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://api.open-meteo.com/v1/forecast",
+        json=sample_openmeteo_hourly_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_hourly(**mock_airflow_context)
+
+    # Assert
+    assert result == len(sample_capitals_df)
+    assert mock_minio_instance.upload_json.call_count == len(sample_capitals_df)
+
+    # Verify uploaded data structure
+    call_args = mock_minio_instance.upload_json.call_args_list[0]
+    uploaded_data = call_args[0][2]
+    assert 'city_code' in uploaded_data
+    assert 'municipio_nombre' in uploaded_data
+    assert '_metadata' in uploaded_data
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_openmeteo_hourly_object_path(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_openmeteo_hourly_response,
+    sample_capitals_df
+):
+    """Test Open-Meteo hourly object path format"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://api.open-meteo.com/v1/forecast",
+        json=sample_openmeteo_hourly_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df.iloc[:1]  # Just Madrid
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_hourly(ds='2026-01-29')
+
+    # Assert
+    assert result == 1
+
+    # Verify object path
+    call_args = mock_minio_instance.upload_json.call_args_list[0]
+    bucket = call_args[0][0]
+    object_path = call_args[0][1]
+
+    assert bucket == 'bronze-openmeteo'
+    assert 'forecast/hourly' in object_path
+    assert '2026-01-29' in object_path
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_openmeteo_hourly_api_error(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_capitals_df
+):
+    """Test Open-Meteo hourly extraction handles API errors"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mock - API returns 500 error
+    responses.add(
+        responses.GET,
+        "https://api.open-meteo.com/v1/forecast",
+        json={"error": "Internal server error"},
+        status=500
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_hourly(ds='2026-01-29')
+
+    # Assert - should return 0 on complete failure
+    assert result == 0
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_openmeteo_hourly_xcom_push(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_openmeteo_hourly_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test Open-Meteo hourly extraction pushes to XCom"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://api.open-meteo.com/v1/forecast",
+        json=sample_openmeteo_hourly_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_hourly(**mock_airflow_context)
+
+    # Assert XCom push
+    mock_ti = mock_airflow_context['task_instance']
+    assert mock_ti.xcom_push.called
+
+    # Verify key pushed
+    xcom_calls = [call[1] for call in mock_ti.xcom_push.call_args_list]
+    keys_pushed = [call['key'] for call in xcom_calls]
+    assert 'openmeteo_hourly_objects' in keys_pushed
+
+
+# ===== Open-Meteo Air Quality Tests =====
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_air_quality_success(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_air_quality_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test successful air quality extraction"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_air_quality_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_air_quality(**mock_airflow_context)
+
+    # Assert
+    assert result == len(sample_capitals_df)
+    assert mock_minio_instance.upload_json.call_count == len(sample_capitals_df)
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_air_quality_object_path(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_air_quality_response,
+    sample_capitals_df
+):
+    """Test air quality object path format"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_air_quality_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df.iloc[:1]
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_air_quality(ds='2026-01-29')
+
+    # Assert
+    assert result == 1
+
+    # Verify object path
+    call_args = mock_minio_instance.upload_json.call_args_list[0]
+    bucket = call_args[0][0]
+    object_path = call_args[0][1]
+
+    assert bucket == 'bronze-openmeteo'
+    assert 'air_quality' in object_path
+    assert '2026-01-29' in object_path
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_air_quality_non_200_response(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_capitals_df
+):
+    """Test air quality extraction skips non-200 responses"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mock - API returns non-200 (silently skipped)
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json={"error": "No data"},
+        status=404
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_air_quality(ds='2026-01-29')
+
+    # Assert - should return 0 (skipped non-200)
+    assert result == 0
+    assert mock_minio_instance.upload_json.call_count == 0
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_air_quality_xcom_push(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_air_quality_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test air quality extraction pushes to XCom"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_air_quality_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_air_quality(**mock_airflow_context)
+
+    # Assert XCom push
+    mock_ti = mock_airflow_context['task_instance']
+    xcom_calls = [call[1] for call in mock_ti.xcom_push.call_args_list]
+    keys_pushed = [call['key'] for call in xcom_calls]
+    assert 'openmeteo_air_quality_objects' in keys_pushed
+
+
+# ===== Open-Meteo Pollen Tests =====
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_pollen_success(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_pollen_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test successful pollen extraction"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks (pollen uses same URL as air quality)
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_pollen_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_pollen(**mock_airflow_context)
+
+    # Assert
+    assert result == len(sample_capitals_df)
+    assert mock_minio_instance.upload_json.call_count == len(sample_capitals_df)
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_pollen_object_path(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_pollen_response,
+    sample_capitals_df
+):
+    """Test pollen object path format"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_pollen_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df.iloc[:1]
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_pollen(ds='2026-01-29')
+
+    # Assert
+    assert result == 1
+
+    # Verify object path
+    call_args = mock_minio_instance.upload_json.call_args_list[0]
+    bucket = call_args[0][0]
+    object_path = call_args[0][1]
+
+    assert bucket == 'bronze-openmeteo'
+    assert 'pollen' in object_path
+    assert '2026-01-29' in object_path
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_pollen_non_200_response(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_capitals_df
+):
+    """Test pollen extraction skips non-200 responses"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mock - API returns non-200
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json={"error": "No data"},
+        status=404
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_pollen(ds='2026-01-29')
+
+    # Assert
+    assert result == 0
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_pollen_xcom_push(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_pollen_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test pollen extraction pushes to XCom"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://air-quality-api.open-meteo.com/v1/air-quality",
+        json=sample_pollen_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_pollen(**mock_airflow_context)
+
+    # Assert XCom push
+    mock_ti = mock_airflow_context['task_instance']
+    xcom_calls = [call[1] for call in mock_ti.xcom_push.call_args_list]
+    keys_pushed = [call['key'] for call in xcom_calls]
+    assert 'openmeteo_pollen_objects' in keys_pushed
+
+
+# ===== Open-Meteo Marine Tests =====
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_marine_success(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_marine_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test successful marine extraction"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://marine-api.open-meteo.com/v1/marine",
+        json=sample_marine_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_marine(**mock_airflow_context)
+
+    # Assert
+    assert result == len(sample_capitals_df)
+    assert mock_minio_instance.upload_json.call_count == len(sample_capitals_df)
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_marine_object_path(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_marine_response,
+    sample_capitals_df
+):
+    """Test marine object path format"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://marine-api.open-meteo.com/v1/marine",
+        json=sample_marine_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df.iloc[:1]
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_marine(ds='2026-01-29')
+
+    # Assert
+    assert result == 1
+
+    # Verify object path
+    call_args = mock_minio_instance.upload_json.call_args_list[0]
+    bucket = call_args[0][0]
+    object_path = call_args[0][1]
+
+    assert bucket == 'bronze-openmeteo'
+    assert 'marine' in object_path
+    assert '2026-01-29' in object_path
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_marine_non_200_response(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_capitals_df
+):
+    """Test marine extraction skips non-200 responses"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mock - API returns non-200
+    responses.add(
+        responses.GET,
+        "https://marine-api.open-meteo.com/v1/marine",
+        json={"error": "No data available for inland location"},
+        status=400
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_marine(ds='2026-01-29')
+
+    # Assert
+    assert result == 0
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_marine_xcom_push(
+    mock_get_capitals,
+    MockMinIOClass,
+    sample_marine_response,
+    sample_capitals_df,
+    mock_airflow_context
+):
+    """Test marine extraction pushes to XCom"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Setup mocks
+    responses.add(
+        responses.GET,
+        "https://marine-api.open-meteo.com/v1/marine",
+        json=sample_marine_response,
+        status=200
+    )
+    mock_get_capitals.return_value = sample_capitals_df
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_marine(**mock_airflow_context)
+
+    # Assert XCom push
+    mock_ti = mock_airflow_context['task_instance']
+    xcom_calls = [call[1] for call in mock_ti.xcom_push.call_args_list]
+    keys_pushed = [call['key'] for call in xcom_calls]
+    assert 'openmeteo_marine_objects' in keys_pushed
+
+
+# ===== Additional Edge Cases =====
+
+@pytest.mark.unit
+@pytest.mark.api
+@responses.activate
+@patch('src.extractor.MinIOClient')
+@patch('src.extractor.get_capitals_dataframe')
+def test_extract_openmeteo_daily_empty_dataframe(
+    mock_get_capitals,
+    MockMinIOClass
+):
+    """Test extraction with empty capitals dataframe"""
+    # Setup MinIO mock
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # Empty dataframe
+    import pandas as pd
+    mock_get_capitals.return_value = pd.DataFrame()
+
+    # Execute
+    extractor = Extractor()
+    result = extractor.extract_openmeteo_daily(ds='2026-01-29')
+
+    # Assert
+    assert result == 0
+    assert mock_minio_instance.upload_json.call_count == 0
