@@ -186,9 +186,9 @@ jobs:
         run: |
           python -c "
           # Verify all main modules are importable
-          from src.extractor import WeatherExtractor
-          from src.transformer import WeatherTransformer
-          from src.loader import WeatherLoader
+          from src.extractor import Extractor
+          from src.transformer import Transformer
+          from src.loader import Loader
           from src.dimensional_loader import DimensionalLoader
           print('All main modules imported successfully!')
           "
