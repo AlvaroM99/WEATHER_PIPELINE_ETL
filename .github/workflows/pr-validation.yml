@@ -5,6 +5,10 @@ on:
     branches: [master, develop]
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   PYTHON_VERSION: '3.11'
 
@@ -158,6 +162,7 @@ jobs:
 
       - name: Generate PR Summary
         uses: actions/github-script@v7
+        continue-on-error: true
         with:
           script: |
             const prCheckResult = '${{ needs.pr-check.result }}';
