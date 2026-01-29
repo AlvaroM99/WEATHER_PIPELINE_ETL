@@ -573,3 +573,259 @@ def test_connection_closed_on_error(mock_connect, MockMinIOClass, mock_db_connec
 
     # Assert - even on error, close should be attempted
     # (Note: in real code, this would be in a finally block)
+
+
+# ===== Additional Loader Tests =====
+
+@pytest.mark.unit
+@patch('src.loader.execute_values')
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_fact_forecast_hourly(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+    """Test loading hourly forecast data"""
+    mock_minio_instance = Mock()
+
+    hourly_df = pd.DataFrame({
+        'time': ['2026-01-29T00:00', '2026-01-29T01:00'],
+        'city_code': ['28079', '28079'],
+        'city_name': ['Madrid', 'Madrid'],
+        'temperature_2m': [12.5, 11.8],
+        'relative_humidity_2m': [70, 72],
+        'precipitation_probability': [0, 10],
+        'precipitation': [0.0, 0.1],
+        'weather_code': [2, 3],
+        'wind_speed_10m': [8.5, 9.2],
+        'wind_direction_10m': [180, 185],
+        'wind_gusts_10m': [15.2, 16.5]
+    })
+
+    mock_minio_instance.read_parquet.return_value = hourly_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 2
+    mock_cursor.fetchall.side_effect = [
+        [('Madrid', 1)],
+        [('28079', 1)]
+    ]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_forecast_hourly(ds='2026-01-29')
+
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.loader.execute_values')
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_fact_air_quality(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+    """Test loading air quality data"""
+    mock_minio_instance = Mock()
+
+    air_quality_df = pd.DataFrame({
+        'time': ['2026-01-29T00:00', '2026-01-29T01:00'],
+        'city_code': ['28079', '28079'],
+        'city_name': ['Madrid', 'Madrid'],
+        'pm10': [15.2, 14.8],
+        'pm2_5': [8.5, 8.2],
+        'carbon_monoxide': [200.5, 198.2],
+        'nitrogen_dioxide': [12.3, 11.8],
+        'sulphur_dioxide': [2.5, 2.3],
+        'ozone': [45.2, 44.8],
+        'aerosol_optical_depth': [0.15, 0.14],
+        'dust': [5.2, 5.0]
+    })
+
+    mock_minio_instance.read_parquet.return_value = air_quality_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 2
+    mock_cursor.fetchall.side_effect = [
+        [('Madrid', 1)],
+        [('28079', 1)]
+    ]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_air_quality(ds='2026-01-29')
+
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.loader.execute_values')
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_fact_pollen(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+    """Test loading pollen data"""
+    mock_minio_instance = Mock()
+
+    pollen_df = pd.DataFrame({
+        'time': ['2026-01-29T00:00', '2026-01-29T01:00'],
+        'city_code': ['28079', '28079'],
+        'city_name': ['Madrid', 'Madrid'],
+        'alder_pollen': [0.0, 0.0],
+        'birch_pollen': [5.2, 5.5],
+        'grass_pollen': [12.5, 13.2],
+        'mugwort_pollen': [0.0, 0.0],
+        'olive_pollen': [8.5, 8.8],
+        'ragweed_pollen': [0.0, 0.0]
+    })
+
+    mock_minio_instance.read_parquet.return_value = pollen_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 2
+    mock_cursor.fetchall.side_effect = [
+        [('Madrid', 1)],
+        [('28079', 1)]
+    ]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_pollen(ds='2026-01-29')
+
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.loader.execute_values')
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_fact_marine(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+    """Test loading marine data"""
+    mock_minio_instance = Mock()
+
+    marine_df = pd.DataFrame({
+        'time': ['2026-01-29T00:00', '2026-01-29T01:00'],
+        'city_code': ['08019', '08019'],
+        'city_name': ['Barcelona', 'Barcelona'],
+        'wave_height_max': [1.5, 1.6],
+        'wave_direction_dominant': [180, 185],
+        'wave_period_max': [8.5, 8.8],
+        'wind_wave_height_max': [0.8, 0.9],
+        'swell_wave_height_max': [1.2, 1.3]
+    })
+
+    mock_minio_instance.read_parquet.return_value = marine_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 2
+    mock_cursor.fetchall.side_effect = [
+        [('Barcelona', 1)],
+        [('08019', 1)]
+    ]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_marine(ds='2026-01-29')
+
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_handles_empty_dataframe(mock_connect, MockMinIOClass, mock_db_connection):
+    """Test loading handles empty DataFrame"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.read_parquet.return_value = pd.DataFrame()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.side_effect = [[('Madrid', 1)], [('28079', 1)]]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_forecast_daily(ds='2026-01-29')
+
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch('src.loader.MinIOClient')
+@patch('src.loader.psycopg2.connect')
+def test_load_handles_missing_city_mapping(mock_connect, MockMinIOClass, mock_db_connection):
+    """Test loading handles missing city mapping"""
+    mock_minio_instance = Mock()
+
+    df = pd.DataFrame({
+        'time': ['2026-01-29'],
+        'city_code': ['99999'],  # Non-existent city
+        'city_name': ['Unknown'],
+        'temperature_2m_max': [20.0]
+    })
+
+    mock_minio_instance.read_parquet.return_value = df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.side_effect = [
+        [],  # No city mapping
+        []
+    ]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_forecast_daily(ds='2026-01-29')
+
+    # Should handle gracefully
+    assert result >= 0
+
+
+@pytest.mark.unit
+@patch('src.loader.MinIOClient')
+def test_clean_value_with_various_types(MockMinIOClass):
+    """Test clean_value handles various data types"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    loader = Loader()
+
+    # Test None
+    assert loader.clean_value(None) is None
+
+    # Test actual NaN values
+    assert loader.clean_value(np.nan) is None
+    assert loader.clean_value(float('nan')) is None
+
+    # Test regular values - strings are preserved as-is
+    assert loader.clean_value(25.5) == 25.5
+    assert loader.clean_value("Madrid") == "Madrid"
+    assert loader.clean_value(100) == 100
+    assert loader.clean_value("nan") == "nan"  # String "nan" is not NaN
+
+
+@pytest.mark.unit
+@patch('src.loader.MinIOClient')
+def test_get_date_id_edge_cases(MockMinIOClass):
+    """Test get_date_id with edge cases"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    loader = Loader()
+
+    # Test with datetime string
+    assert loader.get_date_id('2026-01-29') == 20260129
+    assert loader.get_date_id('2026-12-31') == 20261231
+
+    # Test with datetime object
+    from datetime import datetime
+    dt = datetime(2026, 1, 29, 12, 0, 0)
+    result = loader.get_date_id(dt)
+    assert result == 20260129
+
+    # Test with timestamp string
+    result = loader.get_date_id('2026-01-29T12:00:00')
+    assert result == 20260129

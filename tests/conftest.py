@@ -108,6 +108,64 @@ def sample_openmeteo_hourly_response():
 
 
 @pytest.fixture
+def sample_air_quality_response():
+    """Sample Open-Meteo air quality API response"""
+    return {
+        "latitude": 40.4168,
+        "longitude": -3.7038,
+        "timezone": "Europe/Berlin",
+        "hourly": {
+            "time": ["2026-01-29T00:00", "2026-01-29T01:00", "2026-01-29T02:00"],
+            "pm10": [15.2, 14.8, 16.1],
+            "pm2_5": [8.5, 8.2, 9.0],
+            "carbon_monoxide": [200.5, 198.2, 205.1],
+            "nitrogen_dioxide": [12.3, 11.8, 13.1],
+            "sulphur_dioxide": [2.5, 2.3, 2.8],
+            "ozone": [45.2, 44.8, 46.1],
+            "aerosol_optical_depth": [0.15, 0.14, 0.16],
+            "dust": [5.2, 5.0, 5.5]
+        }
+    }
+
+
+@pytest.fixture
+def sample_pollen_response():
+    """Sample Open-Meteo pollen API response"""
+    return {
+        "latitude": 40.4168,
+        "longitude": -3.7038,
+        "timezone": "Europe/Berlin",
+        "hourly": {
+            "time": ["2026-01-29T00:00", "2026-01-29T01:00", "2026-01-29T02:00"],
+            "alder_pollen": [0.0, 0.0, 0.0],
+            "birch_pollen": [5.2, 5.5, 5.8],
+            "grass_pollen": [12.5, 13.2, 14.1],
+            "mugwort_pollen": [0.0, 0.0, 0.0],
+            "olive_pollen": [8.5, 8.8, 9.2],
+            "ragweed_pollen": [0.0, 0.0, 0.0]
+        }
+    }
+
+
+@pytest.fixture
+def sample_marine_response():
+    """Sample Open-Meteo marine API response"""
+    return {
+        "latitude": 41.3851,
+        "longitude": 2.1734,
+        "timezone": "Europe/Berlin",
+        "hourly": {
+            "time": ["2026-01-29T00:00", "2026-01-29T01:00", "2026-01-29T02:00"],
+            "wave_height_max": [1.5, 1.6, 1.7],
+            "wave_direction_dominant": [180, 185, 190],
+            "wave_period_max": [8.5, 8.8, 9.0],
+            "wind_wave_height_max": [0.8, 0.9, 1.0],
+            "swell_wave_height_max": [1.2, 1.3, 1.4]
+        }
+    }
+
+
+@pytest.fixture
 def sample_cities():
     """Simulation of get_cities() from city_utils"""
     return [
