@@ -1,15 +1,28 @@
 """
 Open-Meteo API Configuration
 Provides access to weather forecast, air quality, pollen, and marine data
+
+Credentials are managed through SecretsManager which prioritizes
+Airflow Connections when available, with fallback to environment variables.
 """
 
 import os
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from weather_config.secrets_manager import get_openmeteo_api_key
 
 # API Key (optional - not required for non-commercial use)
+_api_key = None
+
+
+def get_api_key():
+    """Get Open-Meteo API key with lazy loading (optional for free tier)."""
+    global _api_key
+    if _api_key is None:
+        _api_key = get_openmeteo_api_key()
+    return _api_key
+
+
+# Legacy: Direct access for backward compatibility
 OPENMETEO_API_KEY = os.getenv("OPENMETEO_API_KEY")
 
 # Base URLs for different Open-Meteo services

@@ -25,5 +25,13 @@ airflow users create \
     --role Admin \
     --email admin@example.com || echo "User already exists"
 
+echo "Initializing Airflow Connections for secure credential management..."
+if [ -f /opt/airflow/init-connections.sh ]; then
+    chmod +x /opt/airflow/init-connections.sh
+    /opt/airflow/init-connections.sh
+else
+    echo "Warning: init-connections.sh not found, skipping connection setup"
+fi
+
 echo "Starting Airflow webserver and scheduler..."
 airflow webserver & airflow scheduler

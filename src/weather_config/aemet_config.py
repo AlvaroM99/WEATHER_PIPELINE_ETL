@@ -1,18 +1,31 @@
 """
 AEMET API Configuration
 Spanish State Meteorological Agency (Agencia Estatal de Meteorología)
+
+Credentials are managed through SecretsManager which prioritizes
+Airflow Connections when available, with fallback to environment variables.
 """
 
 import os
 
-from dotenv import load_dotenv
+from weather_config.secrets_manager import get_aemet_api_key
 
-load_dotenv()
+# API Key (via SecretsManager)
+_api_key = None
 
-# API Key (required)
+
+def get_api_key():
+    """Get AEMET API key with lazy loading."""
+    global _api_key
+    if _api_key is None:
+        _api_key = get_aemet_api_key()
+        if not _api_key:
+            print("WARNING: AEMET_API_KEY not found in Airflow Connections or environment.")
+    return _api_key
+
+
+# Legacy: Direct access for backward compatibility
 AEMET_API_KEY = os.getenv("AEMET_API_KEY")
-if not AEMET_API_KEY:
-    print("WARNING: AEMET_API_KEY not found in environment variables.")
 
 # Base URL
 AEMET_BASE_URL = "https://opendata.aemet.es/opendata/api"
