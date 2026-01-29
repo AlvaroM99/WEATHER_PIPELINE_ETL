@@ -2,17 +2,21 @@
 City Utilities
 Helper functions for working with city data
 """
-import pandas as pd
-import sys
+
 import os
-import requests
+import sys
 from io import StringIO
+
+import pandas as pd
+import requests
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # GitHub URL for raw_cities.csv
-CITIES_CSV_URL = "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
+CITIES_CSV_URL = (
+    "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
+)
 
 # Cache for cities data (loaded once at startup)
 _cities_cache = None
@@ -42,12 +46,21 @@ def load_cities_from_github():
 
         # Parse CSV
         csv_data = StringIO(response.text)
-        df = pd.read_csv(csv_data, sep=',')
+        df = pd.read_csv(csv_data, sep=",")
 
         # Validate required columns
-        required_cols = ['city_code', 'city_name', 'latitud', 'longitud', 'country_code', 'is_coastal']
+        required_cols = [
+            "city_code",
+            "city_name",
+            "latitud",
+            "longitud",
+            "country_code",
+            "is_coastal",
+        ]
         if not all(col in df.columns for col in required_cols):
-            raise ValueError(f"CSV missing required columns. Expected: {required_cols}, Got: {df.columns.tolist()}")
+            raise ValueError(
+                f"CSV missing required columns. Expected: {required_cols}, Got: {df.columns.tolist()}"
+            )
 
         # Cache the data
         _cities_cache = df
@@ -74,15 +87,17 @@ def get_capitals_dataframe():
     df = load_cities_from_github()
 
     # Convert to expected format for extractors
-    return pd.DataFrame([
-        {
-            'city_code': row['city_code'],
-            'municipio_nombre': row['city_name'],
-            'latitude': row['latitud'],
-            'longitude': row['longitud']
-        }
-        for _, row in df.iterrows()
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "city_code": row["city_code"],
+                "municipio_nombre": row["city_name"],
+                "latitude": row["latitud"],
+                "longitude": row["longitud"],
+            }
+            for _, row in df.iterrows()
+        ]
+    )
 
 
 def get_cities():
@@ -98,11 +113,7 @@ def get_cities():
     # Convert to expected format for OpenWeather
     cities = []
     for _, row in df.iterrows():
-        cities.append({
-            'name': row['city_name'],
-            'lat': row['latitud'],
-            'lon': row['longitud']
-        })
+        cities.append({"name": row["city_name"], "lat": row["latitud"], "lon": row["longitud"]})
 
     return cities
 
@@ -118,16 +129,18 @@ def get_coastal_cities():
     df_raw = load_cities_from_github()
 
     # Filter for coastal cities (is_coastal == 1)
-    coastal_df = df_raw[df_raw['is_coastal'] == 1]
+    coastal_df = df_raw[df_raw["is_coastal"] == 1]
 
     # Convert to expected format
     coastal_cities = []
     for _, row in coastal_df.iterrows():
-        coastal_cities.append({
-            "name": row['city_name'],
-            "lat": row['latitud'],
-            "lon": row['longitud'],
-            "code": row['city_code']
-        })
+        coastal_cities.append(
+            {
+                "name": row["city_name"],
+                "lat": row["latitud"],
+                "lon": row["longitud"],
+                "code": row["city_code"],
+            }
+        )
 
     return coastal_cities

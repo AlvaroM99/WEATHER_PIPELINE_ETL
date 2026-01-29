@@ -18,7 +18,7 @@ class DataQualityException(Exception):
 
     def __str__(self):
         if self.validation_results:
-            failed_expectations = self.validation_results.get('failed_expectations', [])
+            failed_expectations = self.validation_results.get("failed_expectations", [])
             return f"{self.message} - Failed expectations: {failed_expectations}"
         return self.message
 

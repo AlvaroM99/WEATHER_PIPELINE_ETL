@@ -3,17 +3,22 @@ Unified Loader
 Consolidates all loading logic into a single class.
 Includes data quality validation using Great Expectations (optional).
 """
+
 import logging
+from datetime import datetime
+from typing import Callable, Optional
+
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
-from datetime import datetime
-from typing import Optional, Callable
 
-from src.weather_config.app_config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST
-from src.weather_config.lake_config import (
-    SILVER_OPENWEATHER_BUCKET, SILVER_PATH_TEMPLATE
+from src.weather_config.app_config import (
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_USER,
 )
+from src.weather_config.lake_config import SILVER_OPENWEATHER_BUCKET, SILVER_PATH_TEMPLATE
 from src.weather_utils.minio_client import MinIOClient
 
 # Data quality imports (optional - graceful degradation if not installed)
@@ -21,15 +26,16 @@ DATA_QUALITY_AVAILABLE = False
 try:
     from src.data_quality.exceptions import DataQualityException
     from src.data_quality.expectations import (
-        validate_weather_observation,
+        validate_air_quality,
         validate_daily_forecast,
         validate_hourly_forecast,
-        validate_air_quality,
-        validate_pollen,
         validate_marine,
+        validate_pollen,
+        validate_weather_observation,
     )
     from src.data_quality.metrics import DataQualityMetrics
     from src.data_quality.validators import ValidationResult
+
     DATA_QUALITY_AVAILABLE = True
 except ImportError as e:
     # Great Expectations not installed - validation will be disabled
@@ -41,6 +47,7 @@ except ImportError as e:
         "Install great_expectations to enable validation."
     )
 
+
 class Loader:
     """
     Unified Loader Manager.
@@ -51,7 +58,7 @@ class Loader:
         self,
         enable_validation: bool = True,
         strict_validation: bool = False,
-        collect_metrics: bool = True
+        collect_metrics: bool = True,
     ):
         """
         Initialize the Loader.
@@ -77,7 +84,9 @@ class Loader:
                 "Validation will be skipped."
             )
 
-        self.quality_metrics = DataQualityMetrics() if self.collect_metrics and DataQualityMetrics else None
+        self.quality_metrics = (
+            DataQualityMetrics() if self.collect_metrics and DataQualityMetrics else None
+        )
         self._last_validation_results = {}
 
     def log_start(self, msg: str):
@@ -97,10 +106,7 @@ class Loader:
     # ========================================================================
 
     def validate_data(
-        self,
-        df: pd.DataFrame,
-        data_type: str,
-        table_name: str
+        self, df: pd.DataFrame, data_type: str, table_name: str
     ) -> Optional[ValidationResult]:
         """
         Validate a DataFrame before loading.
@@ -119,14 +125,18 @@ class Loader:
         if not self.enable_validation or not DATA_QUALITY_AVAILABLE:
             return None
 
-        validators = {
-            'observation': validate_weather_observation,
-            'daily_forecast': validate_daily_forecast,
-            'hourly_forecast': validate_hourly_forecast,
-            'air_quality': validate_air_quality,
-            'pollen': validate_pollen,
-            'marine': validate_marine,
-        } if DATA_QUALITY_AVAILABLE else {}
+        validators = (
+            {
+                "observation": validate_weather_observation,
+                "daily_forecast": validate_daily_forecast,
+                "hourly_forecast": validate_hourly_forecast,
+                "air_quality": validate_air_quality,
+                "pollen": validate_pollen,
+                "marine": validate_marine,
+            }
+            if DATA_QUALITY_AVAILABLE
+            else {}
+        )
 
         validator_func = validators.get(data_type)
         if not validator_func:
@@ -153,12 +163,12 @@ class Loader:
 
             # Collect metrics if enabled
             if self.collect_metrics and self.quality_metrics:
-                key_columns = ['city_name', 'time'] if 'city_name' in df.columns else ['city', 'date']
-                timestamp_col = 'time' if 'time' in df.columns else None
+                key_columns = (
+                    ["city_name", "time"] if "city_name" in df.columns else ["city", "date"]
+                )
+                timestamp_col = "time" if "time" in df.columns else None
                 report = self.quality_metrics.generate_report(
-                    df, table_name, result,
-                    key_columns=key_columns,
-                    timestamp_column=timestamp_col
+                    df, table_name, result, key_columns=key_columns, timestamp_column=timestamp_col
                 )
                 self.logger.info(f"📊 Quality score for {table_name}: {report.overall_score:.2%}")
 
@@ -178,15 +188,11 @@ class Loader:
 
     def get_quality_report(self) -> dict:
         """Get a summary of all validation results."""
-        return {
-            table: result.to_dict()
-            for table, result in self._last_validation_results.items()
-        }
+        return {table: result.to_dict() for table, result in self._last_validation_results.items()}
 
     def get_db_connection(self):
         return psycopg2.connect(
-            host=POSTGRES_HOST, database=POSTGRES_DB,
-            user=POSTGRES_USER, password=POSTGRES_PASSWORD
+            host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
         )
 
     def get_city_id_mapping(self, conn):
@@ -195,16 +201,16 @@ class Loader:
         # Also map city_name for OpenWeather which uses names
         cur.execute("SELECT city_name, city_id FROM dwh.dim_city")
         name_map = {row[0]: row[1] for row in cur.fetchall()}
-        
+
         cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
         code_map = {row[0]: row[1] for row in cur.fetchall()}
-        
+
         cur.close()
         return name_map, code_map
 
     def get_date_id(self, date_str):
         try:
-            return int(str(date_str)[:10].replace('-', ''))
+            return int(str(date_str)[:10].replace("-", ""))
         except ValueError:
             return None
 
@@ -224,7 +230,7 @@ class Loader:
         conn = self.get_db_connection()
         try:
             name_map, _ = self.get_city_id_mapping(conn)
-            execution_date = context.get('ds', datetime.now().strftime('%Y-%m-%d'))
+            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
             date_id = self.get_date_id(execution_date)
 
             object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
@@ -235,32 +241,50 @@ class Loader:
                 return 0
 
             # Validate data quality before loading
-            self.validate_data(df, 'observation', 'fct_weather_observation')
+            self.validate_data(df, "observation", "fct_weather_observation")
 
             records = []
             for _, row in df.iterrows():
-                city_id = name_map.get(row.get('city'))
-                if not city_id: continue
+                city_id = name_map.get(row.get("city"))
+                if not city_id:
+                    continue
 
                 # Handle timestamp - use date if dt not available
-                obs_timestamp = pd.to_datetime(row.get('dt'), unit='s') if 'dt' in row and pd.notna(row.get('dt')) else datetime.now()
+                obs_timestamp = (
+                    pd.to_datetime(row.get("dt"), unit="s")
+                    if "dt" in row and pd.notna(row.get("dt"))
+                    else datetime.now()
+                )
 
                 # Clean all values to convert NaN to None
-                records.append((
-                    city_id, date_id, obs_timestamp,
-                    self.clean_value(row.get('temperature')), self.clean_value(row.get('feels_like')),
-                    self.clean_value(row.get('temp_min')), self.clean_value(row.get('temp_max')),
-                    self.clean_value(row.get('pressure')), self.clean_value(row.get('humidity')),
-                    self.clean_value(row.get('visibility')),
-                    self.clean_value(row.get('wind_speed')), self.clean_value(row.get('wind_deg')),
-                    self.clean_value(row.get('wind_gust')),
-                    self.clean_value(row.get('clouds')), self.clean_value(row.get('weather_id')),
-                    row.get('weather_main'), row.get('weather_description'),
-                    self.clean_value(row.get('rain_1h')), self.clean_value(row.get('rain_3h')),
-                    self.clean_value(row.get('snow_1h')), self.clean_value(row.get('snow_3h'))
-                ))
+                records.append(
+                    (
+                        city_id,
+                        date_id,
+                        obs_timestamp,
+                        self.clean_value(row.get("temperature")),
+                        self.clean_value(row.get("feels_like")),
+                        self.clean_value(row.get("temp_min")),
+                        self.clean_value(row.get("temp_max")),
+                        self.clean_value(row.get("pressure")),
+                        self.clean_value(row.get("humidity")),
+                        self.clean_value(row.get("visibility")),
+                        self.clean_value(row.get("wind_speed")),
+                        self.clean_value(row.get("wind_deg")),
+                        self.clean_value(row.get("wind_gust")),
+                        self.clean_value(row.get("clouds")),
+                        self.clean_value(row.get("weather_id")),
+                        row.get("weather_main"),
+                        row.get("weather_description"),
+                        self.clean_value(row.get("rain_1h")),
+                        self.clean_value(row.get("rain_3h")),
+                        self.clean_value(row.get("snow_1h")),
+                        self.clean_value(row.get("snow_3h")),
+                    )
+                )
 
-            if not records: return 0
+            if not records:
+                return 0
 
             insert_query = """
                 INSERT INTO dwh.fct_weather_observation (
@@ -272,7 +296,7 @@ class Loader:
                     rain_1h, rain_3h, snow_1h, snow_3h
                 ) VALUES %s ON CONFLICT DO NOTHING
             """
-            
+
             cur = conn.cursor()
             execute_values(cur, insert_query, records)
             conn.commit()
@@ -295,7 +319,7 @@ class Loader:
         self.log_start("Loading fct_weather_forecast")
         return self._load_generic(
             context,
-            bucket='silver-openmeteo',
+            bucket="silver-openmeteo",
             prefix_template="forecast/daily/{execution_date}/",
             insert_query="""
                 INSERT INTO dwh.fct_weather_forecast (
@@ -309,24 +333,33 @@ class Loader:
                 ) VALUES %s
             """,
             mapper=self._map_daily_forecast,
-            data_type='daily_forecast',
-            table_name='fct_weather_forecast'
+            data_type="daily_forecast",
+            table_name="fct_weather_forecast",
         )
 
     def _map_daily_forecast(self, row, city_id, extraction_date_id):
-        forecast_date = pd.to_datetime(row.get('time')).strftime('%Y-%m-%d')
+        forecast_date = pd.to_datetime(row.get("time")).strftime("%Y-%m-%d")
         return (
-            city_id, self.get_date_id(forecast_date), extraction_date_id,
-            row.get('temperature_2m_max'), row.get('temperature_2m_min'),
-            row.get('apparent_temperature_max'), row.get('apparent_temperature_min'),
-            row.get('precipitation_sum'), row.get('rain_sum'), row.get('showers_sum'),
-            row.get('snowfall_sum'), row.get('precipitation_hours'),
-            row.get('wind_speed_10m_max'), row.get('wind_gusts_10m_max'),
-            row.get('wind_direction_10m_dominant'),
-            pd.to_datetime(row.get('sunrise')).time() if pd.notna(row.get('sunrise')) else None,
-            pd.to_datetime(row.get('sunset')).time() if pd.notna(row.get('sunset')) else None,
-            row.get('shortwave_radiation_sum'), row.get('weather_code'),
-            row.get('et0_fao_evapotranspiration')
+            city_id,
+            self.get_date_id(forecast_date),
+            extraction_date_id,
+            row.get("temperature_2m_max"),
+            row.get("temperature_2m_min"),
+            row.get("apparent_temperature_max"),
+            row.get("apparent_temperature_min"),
+            row.get("precipitation_sum"),
+            row.get("rain_sum"),
+            row.get("showers_sum"),
+            row.get("snowfall_sum"),
+            row.get("precipitation_hours"),
+            row.get("wind_speed_10m_max"),
+            row.get("wind_gusts_10m_max"),
+            row.get("wind_direction_10m_dominant"),
+            pd.to_datetime(row.get("sunrise")).time() if pd.notna(row.get("sunrise")) else None,
+            pd.to_datetime(row.get("sunset")).time() if pd.notna(row.get("sunset")) else None,
+            row.get("shortwave_radiation_sum"),
+            row.get("weather_code"),
+            row.get("et0_fao_evapotranspiration"),
         )
 
     # ========================================================================
@@ -338,7 +371,7 @@ class Loader:
         self.log_start("Loading fct_weather_forecast_hourly")
         return self._load_generic(
             context,
-            bucket='silver-openmeteo',
+            bucket="silver-openmeteo",
             prefix_template="forecast/hourly/{execution_date}/",
             insert_query="""
                 INSERT INTO dwh.fct_weather_forecast_hourly (
@@ -353,21 +386,33 @@ class Loader:
                 ) VALUES %s
             """,
             mapper=self._map_hourly_forecast,
-            data_type='hourly_forecast',
-            table_name='fct_weather_forecast_hourly'
+            data_type="hourly_forecast",
+            table_name="fct_weather_forecast_hourly",
         )
 
     def _map_hourly_forecast(self, row, city_id, extraction_date_id):
         return (
-            city_id, pd.to_datetime(row.get('time')), extraction_date_id,
-            row.get('temperature_2m'), row.get('temperature_80m'), row.get('apparent_temperature'),
-            row.get('relative_humidity_2m'), row.get('dew_point_2m'),
-            row.get('precipitation_probability'), row.get('precipitation'),
-            row.get('rain'), row.get('snowfall'),
-            row.get('pressure_msl'), row.get('surface_pressure'),
-            row.get('cloud_cover'), row.get('visibility'), row.get('uv_index'),
-            row.get('wind_speed_10m'), row.get('wind_direction_10m'), row.get('wind_gusts_10m'),
-            row.get('weather_code')
+            city_id,
+            pd.to_datetime(row.get("time")),
+            extraction_date_id,
+            row.get("temperature_2m"),
+            row.get("temperature_80m"),
+            row.get("apparent_temperature"),
+            row.get("relative_humidity_2m"),
+            row.get("dew_point_2m"),
+            row.get("precipitation_probability"),
+            row.get("precipitation"),
+            row.get("rain"),
+            row.get("snowfall"),
+            row.get("pressure_msl"),
+            row.get("surface_pressure"),
+            row.get("cloud_cover"),
+            row.get("visibility"),
+            row.get("uv_index"),
+            row.get("wind_speed_10m"),
+            row.get("wind_direction_10m"),
+            row.get("wind_gusts_10m"),
+            row.get("weather_code"),
         )
 
     # ========================================================================
@@ -379,7 +424,7 @@ class Loader:
         self.log_start("Loading fct_air_quality")
         return self._load_generic(
             context,
-            bucket='silver-openmeteo',
+            bucket="silver-openmeteo",
             prefix_template="air_quality/{execution_date}/",
             insert_query="""
                 INSERT INTO dwh.fct_air_quality (
@@ -390,16 +435,26 @@ class Loader:
                 ) VALUES %s
             """,
             mapper=self._map_air_quality,
-            data_type='air_quality',
-            table_name='fct_air_quality'
+            data_type="air_quality",
+            table_name="fct_air_quality",
         )
 
     def _map_air_quality(self, row, city_id, extraction_date_id):
-        def g(k): return row.get(k) if pd.notna(row.get(k)) else None
+        def g(k):
+            return row.get(k) if pd.notna(row.get(k)) else None
+
         return (
-            city_id, pd.to_datetime(row.get('time')), extraction_date_id,
-            g('pm10'), g('pm2_5'), g('carbon_monoxide'), g('nitrogen_dioxide'),
-            g('sulphur_dioxide'), g('ozone'), g('aerosol_optical_depth'), g('dust')
+            city_id,
+            pd.to_datetime(row.get("time")),
+            extraction_date_id,
+            g("pm10"),
+            g("pm2_5"),
+            g("carbon_monoxide"),
+            g("nitrogen_dioxide"),
+            g("sulphur_dioxide"),
+            g("ozone"),
+            g("aerosol_optical_depth"),
+            g("dust"),
         )
 
     # ========================================================================
@@ -411,7 +466,7 @@ class Loader:
         self.log_start("Loading fct_pollen")
         return self._load_generic(
             context,
-            bucket='silver-openmeteo',
+            bucket="silver-openmeteo",
             prefix_template="pollen/{execution_date}/",
             insert_query="""
                 INSERT INTO dwh.fct_pollen (
@@ -422,16 +477,24 @@ class Loader:
                 ) VALUES %s
             """,
             mapper=self._map_pollen,
-            data_type='pollen',
-            table_name='fct_pollen'
+            data_type="pollen",
+            table_name="fct_pollen",
         )
 
     def _map_pollen(self, row, city_id, extraction_date_id):
-        def g(k): return row.get(k) if pd.notna(row.get(k)) else None
+        def g(k):
+            return row.get(k) if pd.notna(row.get(k)) else None
+
         return (
-            city_id, pd.to_datetime(row.get('time')), extraction_date_id,
-            g('alder_pollen'), g('birch_pollen'), g('grass_pollen'),
-            g('mugwort_pollen'), g('olive_pollen'), g('ragweed_pollen')
+            city_id,
+            pd.to_datetime(row.get("time")),
+            extraction_date_id,
+            g("alder_pollen"),
+            g("birch_pollen"),
+            g("grass_pollen"),
+            g("mugwort_pollen"),
+            g("olive_pollen"),
+            g("ragweed_pollen"),
         )
 
     # ========================================================================
@@ -443,7 +506,7 @@ class Loader:
         self.log_start("Loading fct_marine")
         return self._load_generic(
             context,
-            bucket='silver-openmeteo',
+            bucket="silver-openmeteo",
             prefix_template="marine/{execution_date}/",
             insert_query="""
                 INSERT INTO dwh.fct_marine (
@@ -453,18 +516,28 @@ class Loader:
                 ) VALUES %s
             """,
             mapper=self._map_marine,
-            data_type='marine',
-            table_name='fct_marine'
+            data_type="marine",
+            table_name="fct_marine",
         )
 
     def _map_marine(self, row, city_id, extraction_date_id):
-        def g(k): return float(row.get(k)) if pd.notna(row.get(k)) else None
-        forecast_date_id = self.get_date_id(row.get('time'))
+        def g(k):
+            return float(row.get(k)) if pd.notna(row.get(k)) else None
+
+        forecast_date_id = self.get_date_id(row.get("time"))
         return (
-            city_id, forecast_date_id, extraction_date_id,
-            g('wave_height_max'),
-            int(row.get('wave_direction_dominant')) if pd.notna(row.get('wave_direction_dominant')) else None,
-            g('wave_period_max'), g('wind_wave_height_max'), g('swell_wave_height_max')
+            city_id,
+            forecast_date_id,
+            extraction_date_id,
+            g("wave_height_max"),
+            (
+                int(row.get("wave_direction_dominant"))
+                if pd.notna(row.get("wave_direction_dominant"))
+                else None
+            ),
+            g("wave_period_max"),
+            g("wind_wave_height_max"),
+            g("swell_wave_height_max"),
         )
 
     # ========================================================================
@@ -479,7 +552,7 @@ class Loader:
         insert_query,
         mapper,
         data_type: str = None,
-        table_name: str = None
+        table_name: str = None,
     ):
         """
         Generic loader with integrated data quality validation.
@@ -493,7 +566,7 @@ class Loader:
             data_type: Data type for validation ('daily_forecast', 'hourly_forecast', etc.)
             table_name: Target table name for logging
         """
-        execution_date = context.get('ds', datetime.now().strftime('%Y-%m-%d'))
+        execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
         extraction_date_id = self.get_date_id(execution_date)
         conn = self.get_db_connection()
 
@@ -503,7 +576,9 @@ class Loader:
 
             try:
                 objects = self.minio_client.client.list_objects(bucket, prefix=silver_path)
-                parquet_files = [obj.object_name for obj in objects if obj.object_name.endswith('.parquet')]
+                parquet_files = [
+                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                ]
             except Exception:
                 parquet_files = []
 
@@ -519,39 +594,42 @@ class Loader:
                 self.validate_data(df, data_type, table_name)
 
             # Deduplicate data to avoid PK violations
-            if 'city_name' in df.columns and 'time' in df.columns:
+            if "city_name" in df.columns and "time" in df.columns:
                 initial_count = len(df)
-                df.drop_duplicates(subset=['city_name', 'time'], inplace=True)
+                df.drop_duplicates(subset=["city_name", "time"], inplace=True)
                 if len(df) < initial_count:
                     self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
 
             records = []
             for _, row in df.iterrows():
-                city_id = name_map.get(row.get('city_name'))
-                if not city_id: 
-                    # Try fallback to city column if city_name missing (common in some dfs)
-                    city_id = name_map.get(row.get('city'))
-                
+                city_id = name_map.get(row.get("city_name"))
                 if not city_id:
-                    self.logger.warning(f"City not found for row: {row.get('city_name') or row.get('city')}")
+                    # Try fallback to city column if city_name missing (common in some dfs)
+                    city_id = name_map.get(row.get("city"))
+
+                if not city_id:
+                    self.logger.warning(
+                        f"City not found for row: {row.get('city_name') or row.get('city')}"
+                    )
                     continue
-                    
+
                 records.append(mapper(row, city_id, extraction_date_id))
-            
-            if not records: return 0
-            
+
+            if not records:
+                return 0
+
             # Add created_at timestamp
             current_time = datetime.now()
             records_with_time = [(*rec, current_time) for rec in records]
-            
+
             cur = conn.cursor()
             execute_values(cur, insert_query, records_with_time)
             conn.commit()
-            
+
             self.logger.info(f"Inserted {cur.rowcount} records")
             cur.close()
             return cur.rowcount
-            
+
         except Exception as e:
             conn.rollback()
             self.log_error("Error loading data", e)

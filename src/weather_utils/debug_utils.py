@@ -2,14 +2,16 @@
 Debug Utilities for Weather Pipeline ETL
 Provides diagnostic tools for troubleshooting pipeline issues.
 """
-import logging
+
 import json
-import pandas as pd
-from typing import Dict, List, Optional, Any
+import logging
+import time
+import traceback
 from datetime import datetime
 from functools import wraps
-import traceback
-import time
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 
 # Import dependencies for connectivity checks
 try:
@@ -39,8 +41,8 @@ def setup_debug_logging(level: str = "DEBUG") -> logging.Logger:
 
     # Create formatter with detailed output
     formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # Setup console handler
@@ -49,7 +51,7 @@ def setup_debug_logging(level: str = "DEBUG") -> logging.Logger:
     console_handler.setFormatter(formatter)
 
     # Configure root logger
-    logger = logging.getLogger('weather_pipeline')
+    logger = logging.getLogger("weather_pipeline")
     logger.setLevel(log_level)
 
     # Remove existing handlers to avoid duplicates
@@ -68,9 +70,10 @@ def timing_decorator(func):
         def my_function():
             ...
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
-        logger = logging.getLogger('weather_pipeline.timing')
+        logger = logging.getLogger("weather_pipeline.timing")
         start_time = time.time()
 
         try:
@@ -87,9 +90,7 @@ def timing_decorator(func):
 
 
 def validate_dataframe(
-    df: pd.DataFrame,
-    required_columns: List[str],
-    name: str = "DataFrame"
+    df: pd.DataFrame, required_columns: List[str], name: str = "DataFrame"
 ) -> Dict[str, Any]:
     """
     Validate a DataFrame and return diagnostic information.
@@ -102,12 +103,7 @@ def validate_dataframe(
     Returns:
         Dictionary with validation results
     """
-    result = {
-        "name": name,
-        "valid": True,
-        "issues": [],
-        "stats": {}
-    }
+    result = {"name": name, "valid": True, "issues": [], "stats": {}}
 
     if df is None:
         result["valid"] = False
@@ -131,7 +127,7 @@ def validate_dataframe(
         "column_count": len(df.columns),
         "columns": list(df.columns),
         "null_counts": df.isnull().sum().to_dict(),
-        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()}
+        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
     }
 
     # Check for high null ratios
@@ -154,6 +150,7 @@ def inspect_json_structure(data: dict, max_depth: int = 3) -> Dict[str, Any]:
     Returns:
         Dictionary describing the structure
     """
+
     def _inspect(obj, depth=0):
         if depth >= max_depth:
             return f"<max depth reached>"
@@ -162,13 +159,13 @@ def inspect_json_structure(data: dict, max_depth: int = 3) -> Dict[str, Any]:
             return {
                 "_type": "dict",
                 "_keys": list(obj.keys()),
-                "_sample": {k: _inspect(v, depth + 1) for k, v in list(obj.items())[:5]}
+                "_sample": {k: _inspect(v, depth + 1) for k, v in list(obj.items())[:5]},
             }
         elif isinstance(obj, list):
             return {
                 "_type": "list",
                 "_length": len(obj),
-                "_sample": _inspect(obj[0], depth + 1) if obj else None
+                "_sample": _inspect(obj[0], depth + 1) if obj else None,
             }
         else:
             return {"_type": type(obj).__name__, "_value": str(obj)[:50]}
@@ -177,10 +174,7 @@ def inspect_json_structure(data: dict, max_depth: int = 3) -> Dict[str, Any]:
 
 
 def compare_dataframes(
-    df1: pd.DataFrame,
-    df2: pd.DataFrame,
-    name1: str = "df1",
-    name2: str = "df2"
+    df1: pd.DataFrame, df2: pd.DataFrame, name1: str = "df1", name2: str = "df2"
 ) -> Dict[str, Any]:
     """
     Compare two DataFrames for debugging transformations.
@@ -197,14 +191,10 @@ def compare_dataframes(
     result = {
         "shapes": {
             name1: df1.shape if df1 is not None else None,
-            name2: df2.shape if df2 is not None else None
+            name2: df2.shape if df2 is not None else None,
         },
-        "columns": {
-            "only_in_" + name1: [],
-            "only_in_" + name2: [],
-            "common": []
-        },
-        "dtype_differences": {}
+        "columns": {"only_in_" + name1: [], "only_in_" + name2: [], "common": []},
+        "dtype_differences": {},
     }
 
     if df1 is None or df2 is None:
@@ -222,7 +212,7 @@ def compare_dataframes(
         if df1[col].dtype != df2[col].dtype:
             result["dtype_differences"][col] = {
                 name1: str(df1[col].dtype),
-                name2: str(df2[col].dtype)
+                name2: str(df2[col].dtype),
             }
 
     return result
@@ -248,18 +238,15 @@ def trace_exception(e: Exception) -> Dict[str, Any]:
                 "file": frame.filename,
                 "line": frame.lineno,
                 "function": frame.name,
-                "code": frame.line
+                "code": frame.line,
             }
             for frame in tb
-        ]
+        ],
     }
 
 
 def check_minio_connectivity(
-    endpoint: str,
-    access_key: str,
-    secret_key: str,
-    secure: bool = False
+    endpoint: str, access_key: str, secret_key: str, secure: bool = False
 ) -> Dict[str, Any]:
     """
     Test MinIO server connectivity and permissions.
@@ -273,24 +260,14 @@ def check_minio_connectivity(
     Returns:
         Dictionary with connectivity test results
     """
-    result = {
-        "connected": False,
-        "buckets_accessible": False,
-        "buckets": [],
-        "error": None
-    }
+    result = {"connected": False, "buckets_accessible": False, "buckets": [], "error": None}
 
     if Minio is None:
         result["error"] = "minio library not installed"
         return result
 
     try:
-        client = Minio(
-            endpoint,
-            access_key=access_key,
-            secret_key=secret_key,
-            secure=secure
-        )
+        client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
 
         # Test listing buckets
         buckets = client.list_buckets()
@@ -307,11 +284,7 @@ def check_minio_connectivity(
 
 
 def check_postgres_connectivity(
-    host: str,
-    port: int,
-    database: str,
-    user: str,
-    password: str
+    host: str, port: int, database: str, user: str, password: str
 ) -> Dict[str, Any]:
     """
     Test PostgreSQL server connectivity.
@@ -326,12 +299,7 @@ def check_postgres_connectivity(
     Returns:
         Dictionary with connectivity test results
     """
-    result = {
-        "connected": False,
-        "version": None,
-        "tables": [],
-        "error": None
-    }
+    result = {"connected": False, "version": None, "tables": [], "error": None}
 
     if psycopg2 is None:
         result["error"] = "psycopg2 library not installed"
@@ -339,12 +307,7 @@ def check_postgres_connectivity(
 
     try:
         conn = psycopg2.connect(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            connect_timeout=5
+            host=host, port=port, database=database, user=user, password=password, connect_timeout=5
         )
 
         result["connected"] = True
@@ -366,7 +329,7 @@ def check_postgres_connectivity(
 
     except Exception as e:
         # Handle psycopg2-specific errors and generic exceptions
-        if hasattr(e, 'pgerror') and e.pgerror:
+        if hasattr(e, "pgerror") and e.pgerror:
             result["error"] = f"PostgreSQL Error: {e.pgerror}"
         else:
             result["error"] = f"Connection Error: {str(e)}"
@@ -375,8 +338,7 @@ def check_postgres_connectivity(
 
 
 def generate_diagnostic_report(
-    include_minio: bool = True,
-    include_postgres: bool = True
+    include_minio: bool = True, include_postgres: bool = True
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive diagnostic report for the ETL pipeline.
@@ -392,15 +354,13 @@ def generate_diagnostic_report(
 
     report = {
         "timestamp": datetime.now().isoformat(),
-        "environment": {
-            "python_version": None,
-            "required_env_vars": {}
-        },
-        "connectivity": {}
+        "environment": {"python_version": None, "required_env_vars": {}},
+        "connectivity": {},
     }
 
     # Check Python version
     import sys
+
     report["environment"]["python_version"] = sys.version
 
     # Check required environment variables
@@ -412,14 +372,14 @@ def generate_diagnostic_report(
         "POSTGRES_HOST",
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",
-        "POSTGRES_DB"
+        "POSTGRES_DB",
     ]
 
     for var in required_vars:
         value = os.getenv(var)
         report["environment"]["required_env_vars"][var] = {
             "set": value is not None,
-            "value": "***" if value else None  # Mask actual values
+            "value": "***" if value else None,  # Mask actual values
         }
 
     # Connectivity checks
@@ -428,7 +388,7 @@ def generate_diagnostic_report(
             endpoint=os.getenv("MINIO_ENDPOINT", "localhost:9000"),
             access_key=os.getenv("MINIO_ACCESS_KEY", ""),
             secret_key=os.getenv("MINIO_SECRET_KEY", ""),
-            secure=os.getenv("MINIO_SECURE", "false").lower() == "true"
+            secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
         )
 
     if include_postgres:
@@ -437,7 +397,7 @@ def generate_diagnostic_report(
             port=int(os.getenv("POSTGRES_PORT", "5432")),
             database=os.getenv("POSTGRES_DB", "weather"),
             user=os.getenv("POSTGRES_USER", ""),
-            password=os.getenv("POSTGRES_PASSWORD", "")
+            password=os.getenv("POSTGRES_PASSWORD", ""),
         )
 
     return report

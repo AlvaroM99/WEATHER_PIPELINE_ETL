@@ -2,7 +2,9 @@
 AEMET API Configuration
 Spanish State Meteorological Agency (Agencia Estatal de Meteorología)
 """
+
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()

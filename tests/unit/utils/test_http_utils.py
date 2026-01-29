@@ -2,9 +2,10 @@
 Unit tests for HTTP utilities
 Tests retry logic, backoff, and session configuration
 """
+
 import pytest
-import responses
 import requests
+import responses
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -26,8 +27,8 @@ def test_get_retrying_session_has_retry_adapter():
     session = get_retrying_session()
 
     # Check that adapters are configured for both http and https
-    http_adapter = session.get_adapter('http://example.com')
-    https_adapter = session.get_adapter('https://example.com')
+    http_adapter = session.get_adapter("http://example.com")
+    https_adapter = session.get_adapter("https://example.com")
 
     assert isinstance(http_adapter, HTTPAdapter)
     assert isinstance(https_adapter, HTTPAdapter)
@@ -39,7 +40,7 @@ def test_get_retrying_session_default_parameters():
     session = get_retrying_session()
 
     # Get adapter and its retry configuration
-    adapter = session.get_adapter('https://example.com')
+    adapter = session.get_adapter("https://example.com")
     retry_config = adapter.max_retries
 
     assert isinstance(retry_config, Retry)
@@ -56,12 +57,10 @@ def test_get_retrying_session_custom_parameters():
     custom_status_list = (500, 502, 503, 504)
 
     session = get_retrying_session(
-        retries=custom_retries,
-        backoff_factor=custom_backoff,
-        status_forcelist=custom_status_list
+        retries=custom_retries, backoff_factor=custom_backoff, status_forcelist=custom_status_list
     )
 
-    adapter = session.get_adapter('https://example.com')
+    adapter = session.get_adapter("https://example.com")
     retry_config = adapter.max_retries
 
     assert retry_config.total == custom_retries
@@ -219,7 +218,7 @@ def test_retry_allowed_methods():
     """Test that retry configuration includes correct HTTP methods"""
     session = get_retrying_session()
 
-    adapter = session.get_adapter('https://example.com')
+    adapter = session.get_adapter("https://example.com")
     retry_config = adapter.max_retries
 
     # Verify allowed methods
@@ -240,10 +239,7 @@ def test_custom_status_forcelist():
     responses.add(responses.GET, url, status=429)
     responses.add(responses.GET, url, json={"data": "ok"}, status=200)
 
-    session = get_retrying_session(
-        retries=3,
-        status_forcelist=(429, 500, 502, 504)
-    )
+    session = get_retrying_session(retries=3, status_forcelist=(429, 500, 502, 504))
     response = session.get(url)
 
     # Assert - should retry on 429 and succeed
@@ -257,8 +253,8 @@ def test_session_mounts_http_and_https():
     session = get_retrying_session()
 
     # Test that adapters are mounted
-    http_adapter = session.get_adapter('http://example.com')
-    https_adapter = session.get_adapter('https://example.com')
+    http_adapter = session.get_adapter("http://example.com")
+    https_adapter = session.get_adapter("https://example.com")
 
     assert http_adapter is not None
     assert https_adapter is not None
@@ -274,7 +270,7 @@ def test_backoff_factor_configuration():
     # Test with custom backoff factor
     session = get_retrying_session(retries=3, backoff_factor=0.5)
 
-    adapter = session.get_adapter('https://example.com')
+    adapter = session.get_adapter("https://example.com")
     retry_config = adapter.max_retries
 
     # Verify backoff configuration
@@ -283,7 +279,7 @@ def test_backoff_factor_configuration():
 
     # Test with different backoff factor
     session2 = get_retrying_session(retries=2, backoff_factor=1.0)
-    adapter2 = session2.get_adapter('https://example.com')
+    adapter2 = session2.get_adapter("https://example.com")
     retry_config2 = adapter2.max_retries
 
     assert retry_config2.backoff_factor == 1.0
@@ -295,7 +291,7 @@ def test_zero_retries():
     """Test session configuration with zero retries"""
     session = get_retrying_session(retries=0)
 
-    adapter = session.get_adapter('https://example.com')
+    adapter = session.get_adapter("https://example.com")
     retry_config = adapter.max_retries
 
     assert retry_config.total == 0
