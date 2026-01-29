@@ -1,18 +1,75 @@
 """
 Application Configuration
 Shared settings/constants for the weather pipeline
+
+Credentials are managed through SecretsManager which prioritizes
+Airflow Connections when available, with fallback to environment variables.
 """
 
 import os
+from typing import Optional
 
-# OpenWeatherMap API Key
+try:
+    from src.weather_config.secrets_manager import (
+        get_openweather_api_key,
+        get_postgres_credentials,
+    )
+except ImportError:
+    from weather_config.secrets_manager import (
+        get_openweather_api_key,
+        get_postgres_credentials,
+    )
+
+# OpenWeatherMap API Key (via SecretsManager)
+_api_key: Optional[str] = None
+
+
+def get_api_key() -> Optional[str]:
+    """Get OpenWeather API key with lazy loading."""
+    global _api_key
+    if _api_key is None:
+        _api_key = get_openweather_api_key()
+    return _api_key
+
+
+# Legacy: Direct access for backward compatibility
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# PostgreSQL Configuration
+# PostgreSQL Configuration (via SecretsManager)
+_pg_creds = None
+
+
+def _get_pg_creds():
+    """Get PostgreSQL credentials with lazy loading."""
+    global _pg_creds
+    if _pg_creds is None:
+        _pg_creds = get_postgres_credentials()
+    return _pg_creds
+
+
+# Legacy: Direct access for backward compatibility
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
-POSTGRES_HOST = "postgres"  # Docker service name
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+
+
+def get_postgres_config() -> dict:
+    """
+    Get PostgreSQL configuration dictionary.
+
+    Returns dict with: host, port, database, user, password
+    Uses SecretsManager for credential retrieval.
+    """
+    creds = _get_pg_creds()
+    return {
+        "host": creds.host,
+        "port": creds.port,
+        "database": creds.database,
+        "user": creds.user,
+        "password": creds.password,
+    }
+
 
 # Cities to fetch weather data for (major Spanish cities)
 CITIES = [

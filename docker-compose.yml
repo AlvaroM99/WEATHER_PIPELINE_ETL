@@ -63,6 +63,7 @@ services:
       - ./src:/opt/airflow/plugins/src
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./docker/airflow/airflow-init.sh:/opt/airflow/airflow-init.sh
+      - ./docker/airflow/init-connections.sh:/opt/airflow/init-connections.sh
       - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
