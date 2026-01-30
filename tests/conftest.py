@@ -145,13 +145,13 @@ def sample_pollen_response():
 
 @pytest.fixture
 def sample_marine_response():
-    """Sample Open-Meteo marine API response"""
+    """Sample Open-Meteo marine API response (daily aggregations)"""
     return {
         "latitude": 41.3851,
         "longitude": 2.1734,
         "timezone": "Europe/Berlin",
-        "hourly": {
-            "time": ["2026-01-29T00:00", "2026-01-29T01:00", "2026-01-29T02:00"],
+        "daily": {
+            "time": ["2026-01-29", "2026-01-30", "2026-01-31"],
             "wave_height_max": [1.5, 1.6, 1.7],
             "wave_direction_dominant": [180, 185, 190],
             "wave_period_max": [8.5, 8.8, 9.0],

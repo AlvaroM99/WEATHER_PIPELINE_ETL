@@ -270,7 +270,7 @@ class Transformer:
             upstream_keys=["openmeteo_marine_objects"],
             upstream_tasks=["extract_openmeteo_marine"],
             bucket_search_prefix="marine/",
-            data_key="hourly",  # Marine data often comes in hourly blocks even if daily
+            data_key="daily",  # Marine uses daily aggregations (wave_height_max, etc.)
             silver_path_prefix="marine/",
             file_suffix="marine",
         )

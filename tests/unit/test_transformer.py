@@ -703,7 +703,7 @@ def test_transform_marine_coastal_city_data(MockMinIOClass, sample_marine_respon
     transformer = Transformer()
     result = transformer.transform_openmeteo_marine(ds="2026-01-29", task_instance=mock_ti)
 
-    assert result == 3  # 3 hourly entries
+    assert result == 3  # 3 daily entries
 
     call_args = mock_minio_instance.upload_parquet.call_args
     df = call_args[0][2]
