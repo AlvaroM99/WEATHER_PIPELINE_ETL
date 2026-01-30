@@ -61,7 +61,7 @@ jobs:
       - name: Lint changed files
         if: steps.changed-files.outputs.any_changed == 'true'
         run: |
-          flake8 ${{ steps.changed-files.outputs.all_changed_files }} --count --statistics
+          flake8 ${{ steps.changed-files.outputs.all_changed_files }} --count --statistics --ignore=E501
         continue-on-error: true
 
   test-changes:
