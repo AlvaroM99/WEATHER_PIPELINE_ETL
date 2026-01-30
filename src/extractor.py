@@ -16,9 +16,17 @@ import pandas as pd
 import requests
 import urllib3
 
+from src.weather_config.aemet_config import (
+    AEMET_BASE_URL,
+)
+from src.weather_config.aemet_config import ENDPOINTS as AEMET_ENDPOINTS
+from src.weather_config.aemet_config import REQUEST_TIMEOUT as AEMET_TIMEOUT
+from src.weather_config.aemet_config import get_api_key as get_aemet_api_key
+
 # Import configuration and utils
 from src.weather_config.app_config import API_KEY
 from src.weather_config.lake_config import (
+    BRONZE_AEMET_BUCKET,
     BRONZE_BUCKET,
     BRONZE_OPENMETEO_BUCKET,
     BRONZE_PATH_TEMPLATE,
@@ -488,4 +496,350 @@ class Extractor:
             context["task_instance"].xcom_push(
                 key="openmeteo_marine_objects", value=uploaded_objects
             )
+        return len(uploaded_objects)
+
+    # ========================================================================
+    # AEMET Extraction Methods
+    # ========================================================================
+
+    def _aemet_request(self, endpoint: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Make a request to AEMET API (two-step process).
+
+        AEMET API returns a URL in the first response, then the actual data
+        must be fetched from that URL.
+
+        Args:
+            endpoint: API endpoint to call
+
+        Returns:
+            List of data dictionaries or None if request fails
+        """
+        api_key = get_aemet_api_key()
+        if not api_key:
+            self.log_error("AEMET API key not configured")
+            return None
+
+        url = f"{AEMET_BASE_URL}{endpoint}"
+        headers = {"api_key": api_key}
+
+        try:
+            # Step 1: Get the data URL
+            response = self.session.get(url, headers=headers, timeout=AEMET_TIMEOUT)
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("estado") != 200:
+                self.log_error(f"AEMET API error: {result.get('descripcion')}")
+                return None
+
+            data_url = result.get("datos")
+            if not data_url:
+                self.log_error("No data URL in AEMET response")
+                return None
+
+            # Step 2: Fetch actual data from the URL
+            data_response = self.session.get(data_url, timeout=AEMET_TIMEOUT)
+            data_response.raise_for_status()
+            result_data: List[Dict[str, Any]] = data_response.json()
+            return result_data
+
+        except requests.exceptions.RequestException as e:
+            self.log_error(f"AEMET request failed: {endpoint}", e)
+            return None
+        except ValueError as e:
+            self.log_error(f"AEMET JSON decode error: {endpoint}", e)
+            return None
+
+    def extract_aemet_stations(self, **context: Any) -> int:
+        """
+        Extract AEMET station inventory.
+
+        Fetches all meteorological stations from AEMET and stores them
+        in the bronze layer.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of stations extracted (1 file with all stations)
+        """
+        self.log_start("AEMET Stations inventory extraction")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        endpoint = AEMET_ENDPOINTS["stations"]
+        stations = self._aemet_request(endpoint)
+
+        if not stations:
+            self.logger.warning("No stations data received from AEMET")
+            return 0
+
+        # Add metadata
+        data: Dict[str, Any] = {
+            "stations": stations,
+            "_metadata": {
+                "extraction_timestamp": timestamp,
+                "execution_date": execution_date,
+                "station_count": len(stations),
+            },
+        }
+
+        object_path = f"stations/{execution_date}/stations_{timestamp}.json"
+        file_size = self.minio_client.upload_json(BRONZE_AEMET_BUCKET, object_path, data)
+
+        self.log_end(f"Stored {len(stations)} AEMET stations")
+
+        if context.get("task_instance"):
+            context["task_instance"].xcom_push(
+                key="aemet_stations_objects",
+                value=[{"object_path": object_path, "station_count": len(stations)}],
+            )
+
+        return 1
+
+    def extract_aemet_daily_climatology(
+        self,
+        station_ids: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        **context: Any,
+    ) -> int:
+        """
+        Extract daily climatological data from AEMET for specified stations.
+
+        AEMET limits queries to ~31 days per request, so for large date ranges
+        this method splits into multiple requests.
+
+        Args:
+            station_ids: List of station IDs to extract. If None, uses default capitals
+            start_date: Start date in YYYY-MM-DD format. Defaults to execution_date - 30 days
+            end_date: End date in YYYY-MM-DD format. Defaults to execution_date
+            context: Airflow context
+
+        Returns:
+            Number of files uploaded
+        """
+        self.log_start("AEMET Daily Climatology extraction")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Default date range: last 30 days
+        if not end_date:
+            end_date = execution_date
+        if not start_date:
+            from datetime import timedelta
+
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            start_dt = end_dt - timedelta(days=30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        # Default stations: Spanish capital cities stations
+        if not station_ids:
+            station_ids = [
+                "3129",  # Madrid (Retiro)
+                "0076",  # Barcelona (Fabra)
+                "5530E",  # Sevilla (Aeropuerto)
+                "8416",  # Valencia (Aeropuerto)
+                "1024E",  # Bilbao (Aeropuerto)
+                "6155A",  # Malaga (Aeropuerto)
+                "1387",  # Zaragoza (Aeropuerto)
+                "8178D",  # Alicante (Aeropuerto)
+            ]
+
+        # Format dates for AEMET API (ISO format with UTC)
+        start_iso = f"{start_date}T00:00:00UTC"
+        end_iso = f"{end_date}T23:59:59UTC"
+
+        uploaded_objects: List[UploadedObject] = []
+
+        for station_id in station_ids:
+            try:
+                endpoint = AEMET_ENDPOINTS["daily_climatology"].format(
+                    start=start_iso, end=end_iso, station=station_id
+                )
+
+                self.logger.info(f"Fetching climatology for station {station_id}")
+                data = self._aemet_request(endpoint)
+
+                if not data:
+                    self.logger.warning(f"No data for station {station_id}")
+                    continue
+
+                # Store raw data with metadata
+                raw_data: Dict[str, Any] = {
+                    "station_id": station_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "records": data,
+                    "_metadata": {
+                        "extraction_timestamp": timestamp,
+                        "execution_date": execution_date,
+                        "record_count": len(data),
+                    },
+                }
+
+                object_path = (
+                    f"climatology/daily/{execution_date}/" f"daily_{station_id}_{timestamp}.json"
+                )
+                file_size = self.minio_client.upload_json(
+                    BRONZE_AEMET_BUCKET, object_path, raw_data
+                )
+
+                uploaded_objects.append(
+                    {
+                        "object_path": object_path,
+                        "station_id": station_id,
+                        "record_count": len(data),
+                        "file_size": file_size,
+                    }
+                )
+                self.logger.info(f"Stored {len(data)} records for station {station_id}")
+
+                # Rate limiting - AEMET has strict limits
+                time.sleep(0.5)
+
+            except Exception as e:
+                self.log_error(f"Error extracting station {station_id}", e)
+                continue
+
+        self.log_end(f"Stored {len(uploaded_objects)} AEMET climatology files")
+
+        if context.get("task_instance"):
+            context["task_instance"].xcom_push(key="aemet_daily_objects", value=uploaded_objects)
+
+        return len(uploaded_objects)
+
+    def extract_aemet_historical(
+        self,
+        station_ids: Optional[List[str]] = None,
+        start_year: int = 2020,
+        end_year: int = 2025,
+        **context: Any,
+    ) -> int:
+        """
+        Extract historical climatological data from AEMET (2020-2025).
+
+        This method extracts data year by year to handle AEMET's query limits.
+        For each year, it splits into quarterly chunks.
+
+        Args:
+            station_ids: List of station IDs. If None, uses default capitals
+            start_year: Start year (default 2020)
+            end_year: End year (default 2025)
+            context: Airflow context
+
+        Returns:
+            Number of files uploaded
+        """
+        self.log_start(f"AEMET Historical extraction ({start_year}-{end_year})")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Default stations for Spanish capitals
+        if not station_ids:
+            station_ids = [
+                "3129",  # Madrid (Retiro)
+                "0076",  # Barcelona (Fabra)
+                "5530E",  # Sevilla (Aeropuerto)
+                "8416",  # Valencia (Aeropuerto)
+                "1024E",  # Bilbao (Aeropuerto)
+                "6155A",  # Malaga (Aeropuerto)
+                "1387",  # Zaragoza (Aeropuerto)
+                "8178D",  # Alicante (Aeropuerto)
+            ]
+
+        uploaded_objects: List[UploadedObject] = []
+
+        for station_id in station_ids:
+            self.logger.info(f"Extracting historical data for station {station_id}")
+
+            for year in range(start_year, end_year + 1):
+                # Split year into quarters to stay within API limits
+                quarters = [
+                    (f"{year}-01-01", f"{year}-03-31"),
+                    (f"{year}-04-01", f"{year}-06-30"),
+                    (f"{year}-07-01", f"{year}-09-30"),
+                    (f"{year}-10-01", f"{year}-12-31"),
+                ]
+
+                all_records: List[Dict[str, Any]] = []
+
+                for start_date, end_date in quarters:
+                    # Don't query future dates
+                    if start_date > execution_date:
+                        continue
+
+                    # Adjust end_date if it's in the future
+                    if end_date > execution_date:
+                        end_date = execution_date
+
+                    start_iso = f"{start_date}T00:00:00UTC"
+                    end_iso = f"{end_date}T23:59:59UTC"
+
+                    try:
+                        endpoint = AEMET_ENDPOINTS["daily_climatology"].format(
+                            start=start_iso, end=end_iso, station=station_id
+                        )
+
+                        data = self._aemet_request(endpoint)
+                        if data:
+                            all_records.extend(data)
+                            self.logger.info(
+                                f"  Station {station_id}, {start_date} to {end_date}: "
+                                f"{len(data)} records"
+                            )
+
+                        # Rate limiting
+                        time.sleep(1)
+
+                    except Exception as e:
+                        self.log_error(
+                            f"Error fetching {station_id} for {start_date}-{end_date}", e
+                        )
+                        continue
+
+                # Store yearly data
+                if all_records:
+                    raw_data: Dict[str, Any] = {
+                        "station_id": station_id,
+                        "year": year,
+                        "records": all_records,
+                        "_metadata": {
+                            "extraction_timestamp": timestamp,
+                            "execution_date": execution_date,
+                            "record_count": len(all_records),
+                        },
+                    }
+
+                    object_path = (
+                        f"historical/{year}/{station_id}/" f"historical_{year}_{timestamp}.json"
+                    )
+                    file_size = self.minio_client.upload_json(
+                        BRONZE_AEMET_BUCKET, object_path, raw_data
+                    )
+
+                    uploaded_objects.append(
+                        {
+                            "object_path": object_path,
+                            "station_id": station_id,
+                            "year": year,
+                            "record_count": len(all_records),
+                            "file_size": file_size,
+                        }
+                    )
+                    self.logger.info(
+                        f"Stored {len(all_records)} records for station {station_id}, year {year}"
+                    )
+
+        self.log_end(f"Stored {len(uploaded_objects)} AEMET historical files")
+
+        if context.get("task_instance"):
+            context["task_instance"].xcom_push(
+                key="aemet_historical_objects", value=uploaded_objects
+            )
+
         return len(uploaded_objects)

@@ -389,6 +389,59 @@ class DimensionalLoader:
             cur.close()
             conn.close()
 
+    def load_dim_aemet_stations(self) -> None:
+        """
+        Load AEMET stations dimension with default Spanish capital stations.
+
+        This creates initial station records for the most common Spanish cities.
+        The full station list will be populated from the AEMET API extraction.
+        """
+        self.logger.info("Loading dim_aemet_stations with default stations...")
+
+        conn: psycopg2.extensions.connection = self.get_db_connection()
+        cur: psycopg2.extensions.cursor = conn.cursor()
+
+        try:
+            # Insert default stations for major Spanish cities
+            cur.execute("""
+                INSERT INTO dwh.dim_aemet_stations (
+                    station_id, station_name, province, altitude, latitude, longitude
+                ) VALUES
+                ('3129', 'MADRID, RETIRO', 'MADRID', 667.0, 40.4115, -3.6784),
+                ('0076', 'BARCELONA, FABRA', 'BARCELONA', 412.0, 41.4181, 2.1246),
+                ('5530E', 'SEVILLA, AEROPUERTO', 'SEVILLA', 34.0, 37.4167, -5.8833),
+                ('8416', 'VALENCIA, AEROPUERTO', 'VALENCIA', 69.0, 39.4833, -0.4833),
+                ('1024E', 'BILBAO, AEROPUERTO', 'VIZCAYA', 42.0, 43.3000, -2.9167),
+                ('6155A', 'MALAGA, AEROPUERTO', 'MALAGA', 5.0, 36.6667, -4.4833),
+                ('1387', 'ZARAGOZA, AEROPUERTO', 'ZARAGOZA', 247.0, 41.6617, -1.0042),
+                ('8178D', 'ALICANTE, AEROPUERTO', 'ALICANTE', 43.0, 38.2833, -0.5500),
+                ('1111X', 'SANTANDER, CMT', 'CANTABRIA', 64.0, 43.4917, -3.7992),
+                ('2539', 'VALLADOLID', 'VALLADOLID', 735.0, 41.6528, -4.7617),
+                ('C447A', 'PALMA DE MALLORCA', 'ILLES BALEARS', 8.0, 39.5592, 2.7386),
+                ('9434', 'MURCIA, ALCANTARILLA', 'MURCIA', 75.0, 37.9589, -1.2306),
+                ('6001', 'GRANADA, AEROPUERTO', 'GRANADA', 567.0, 37.1867, -3.7772),
+                ('9091O', 'CORDOBA, AEROPUERTO', 'CORDOBA', 90.0, 37.8417, -4.8500),
+                ('9170', 'TOLEDO', 'TOLEDO', 515.0, 39.8817, -4.0489)
+                ON CONFLICT (station_id) DO UPDATE SET
+                    station_name = EXCLUDED.station_name,
+                    province = EXCLUDED.province,
+                    altitude = EXCLUDED.altitude,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    updated_at = CURRENT_TIMESTAMP
+            """)
+
+            conn.commit()
+            self.logger.info("Loaded 15 default AEMET stations into dim_aemet_stations")
+
+        except Exception as e:
+            conn.rollback()
+            self.log_error("Error loading dim_aemet_stations", e)
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
     def load_all_dimensional_tables(self, **context: Any) -> None:
         """
         Wrapper to load all dimensional tables.
@@ -410,5 +463,6 @@ class DimensionalLoader:
         self.load_dim_seasons()
         self.load_dim_layers()
         self.load_dim_severity()
+        self.load_dim_aemet_stations()
 
         self.log_end("All dimensional tables loaded.")

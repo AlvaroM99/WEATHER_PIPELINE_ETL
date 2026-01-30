@@ -81,8 +81,24 @@ with DAG(
         provide_context=True,
     )
 
+    # AEMET Loading Tasks
+    load_aemet_stations = PythonOperator(
+        task_id="load_aemet_stations",
+        python_callable=run_loading,
+        op_kwargs={"method_name": "load_aemet_stations"},
+        provide_context=True,
+    )
+
+    load_aemet_daily = PythonOperator(
+        task_id="load_fct_aemet_daily",
+        python_callable=run_loading,
+        op_kwargs={"method_name": "load_fact_aemet_daily"},
+        provide_context=True,
+    )
+
     end = EmptyOperator(task_id="loading_complete")
 
+    # Main loading tasks run in parallel
     (
         start
         >> [
@@ -92,6 +108,20 @@ with DAG(
             load_air_quality,
             load_pollen,
             load_marine,
+            load_aemet_stations,
         ]
-        >> end
     )
+
+    # AEMET stations must complete before AEMET daily data (FK dependency)
+    load_aemet_stations >> load_aemet_daily
+
+    # All tasks converge to end
+    [
+        load_observation,
+        load_forecast_daily,
+        load_forecast_hourly,
+        load_air_quality,
+        load_pollen,
+        load_marine,
+        load_aemet_daily,
+    ] >> end

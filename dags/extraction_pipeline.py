@@ -81,6 +81,21 @@ with DAG(
         provide_context=True,
     )
 
+    # AEMET Extraction Tasks
+    extract_aemet_stations = PythonOperator(
+        task_id="extract_aemet_stations",
+        python_callable=run_extraction,
+        op_kwargs={"method_name": "extract_aemet_stations"},
+        provide_context=True,
+    )
+
+    extract_aemet_daily = PythonOperator(
+        task_id="extract_aemet_daily_climatology",
+        python_callable=run_extraction,
+        op_kwargs={"method_name": "extract_aemet_daily_climatology"},
+        provide_context=True,
+    )
+
     end = EmptyOperator(task_id="extraction_complete")
 
     (
@@ -92,6 +107,8 @@ with DAG(
             extract_om_air_quality,
             extract_om_pollen,
             extract_om_marine,
+            extract_aemet_stations,
+            extract_aemet_daily,
         ]
         >> end
     )

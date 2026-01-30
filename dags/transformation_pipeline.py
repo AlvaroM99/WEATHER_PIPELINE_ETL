@@ -81,6 +81,21 @@ with DAG(
         provide_context=True,
     )
 
+    # AEMET Transformation Tasks
+    transform_aemet_stations = PythonOperator(
+        task_id="transform_aemet_stations",
+        python_callable=run_transformation,
+        op_kwargs={"method_name": "transform_aemet_stations"},
+        provide_context=True,
+    )
+
+    transform_aemet_daily = PythonOperator(
+        task_id="transform_aemet_daily_climatology",
+        python_callable=run_transformation,
+        op_kwargs={"method_name": "transform_aemet_daily_climatology"},
+        provide_context=True,
+    )
+
     end = EmptyOperator(task_id="transformation_complete")
 
     (
@@ -92,6 +107,8 @@ with DAG(
             transform_openmeteo_air_quality,
             transform_openmeteo_pollen,
             transform_openmeteo_marine,
+            transform_aemet_stations,
+            transform_aemet_daily,
         ]
         >> end
     )
