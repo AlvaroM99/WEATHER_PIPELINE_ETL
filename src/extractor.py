@@ -456,7 +456,7 @@ class Extractor:
             params: Dict[str, Any] = {
                 "latitude": city["latitude"],
                 "longitude": city["longitude"],
-                "hourly": ",".join(MARINE_PARAMS),
+                "daily": ",".join(MARINE_PARAMS),
                 "timezone": DEFAULT_TIMEZONE,
             }
             if OPENMETEO_API_KEY:

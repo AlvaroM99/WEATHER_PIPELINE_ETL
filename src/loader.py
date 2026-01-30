@@ -620,6 +620,8 @@ class Loader:
         """
         Load marine data to dwh.fct_marine.
 
+        Filters out rows where all marine metrics are NULL (inland cities).
+
         Args:
             context: Airflow context containing execution date
 
@@ -627,21 +629,96 @@ class Loader:
             Number of records inserted
         """
         self.log_start("Loading fct_marine")
-        return self._load_generic(
-            context,
-            bucket="silver-openmeteo",
-            prefix_template="marine/{execution_date}/",
-            insert_query="""
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        extraction_date_id: int = self.get_date_id(execution_date) or 0
+        conn = self.get_db_connection()
+
+        try:
+            name_map, _ = self.get_city_id_mapping(conn)
+            silver_path = f"marine/{execution_date}/"
+
+            try:
+                objects = self.minio_client.client.list_objects(
+                    "silver-openmeteo", prefix=silver_path
+                )
+                parquet_files = [
+                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                ]
+            except Exception:
+                parquet_files = []
+
+            if not parquet_files:
+                self.logger.warning(f"No marine files found for {execution_date}")
+                return 0
+
+            latest_file = sorted(parquet_files)[-1]
+            df = self.minio_client.read_parquet("silver-openmeteo", latest_file)
+
+            # Validate data quality before loading
+            self.validate_data(df, "marine", "fct_marine")
+
+            # Filter out rows where ALL marine metrics are NULL (inland cities)
+            marine_metrics = [
+                "wave_height_max",
+                "wave_direction_dominant",
+                "wave_period_max",
+                "wind_wave_height_max",
+                "swell_wave_height_max",
+            ]
+            initial_count = len(df)
+            df = df.dropna(subset=marine_metrics, how="all")
+            filtered_count = initial_count - len(df)
+            if filtered_count > 0:
+                self.logger.info(
+                    f"Filtered {filtered_count} rows with all NULL metrics (inland cities)"
+                )
+
+            # Deduplicate
+            if "city_name" in df.columns and "time" in df.columns:
+                before_dedup = len(df)
+                df.drop_duplicates(subset=["city_name", "time"], inplace=True)
+                if len(df) < before_dedup:
+                    self.logger.warning(f"Dropped {before_dedup - len(df)} duplicate rows")
+
+            records = []
+            for _, row in df.iterrows():
+                city_id = name_map.get(row.get("city_name"))
+                if not city_id:
+                    continue
+                records.append(self._map_marine(row, city_id, extraction_date_id))
+
+            if not records:
+                self.logger.warning("No valid marine records to insert")
+                return 0
+
+            # Add created_at timestamp
+            current_time = datetime.now()
+            records_with_time = [(*rec, current_time) for rec in records]
+
+            insert_query = """
                 INSERT INTO dwh.fct_marine (
                     city_id, forecast_date_id, extraction_date_id,
                     wave_height_max, wave_direction_dominant, wave_period_max,
                     wind_wave_height_max, swell_wave_height_max, created_at
                 ) VALUES %s
-            """,
-            mapper=self._map_marine,
-            data_type="marine",
-            table_name="fct_marine",
-        )
+            """
+
+            cur = conn.cursor()
+            execute_values(cur, insert_query, records_with_time)
+            conn.commit()
+
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            self.logger.info(f"Inserted {rowcount} marine records")
+            cur.close()
+            return rowcount
+
+        except Exception as e:
+            conn.rollback()
+            self.log_error("Error loading marine data", e)
+            raise
+        finally:
+            conn.close()
 
     def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""

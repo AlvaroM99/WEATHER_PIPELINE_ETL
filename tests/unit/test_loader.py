@@ -703,7 +703,7 @@ def test_load_fact_marine(mock_connect, MockMinIOClass, mock_execute_values, moc
 
     marine_df = pd.DataFrame(
         {
-            "time": ["2026-01-29T00:00", "2026-01-29T01:00"],
+            "time": ["2026-01-29", "2026-01-30"],
             "city_code": ["08019", "08019"],
             "city_name": ["Barcelona", "Barcelona"],
             "wave_height_max": [1.5, 1.6],
