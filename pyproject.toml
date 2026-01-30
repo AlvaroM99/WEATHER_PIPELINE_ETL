@@ -35,7 +35,7 @@ extend-exclude = '''
     | venv
     | __pycache__
     | \.pytest_cache
-    | htmlcov
+    | tests/htmlcov
     | \.eggs
     | build
     | dist
@@ -55,7 +55,7 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 skip_gitignore = true
-skip = [".git", "__pycache__", ".venv", "venv", "htmlcov"]
+skip = [".git", "__pycache__", ".venv", "venv", "tests/htmlcov"]
 known_first_party = ["src"]
 known_third_party = ["pandas", "requests", "minio", "psycopg2", "dotenv", "pyarrow", "great_expectations"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
@@ -101,7 +101,7 @@ exclude = [
     "venv",
     ".venv",
     "__pycache__",
-    "htmlcov",
+    "tests/htmlcov",
     "build",
     "dist",
     "tests",
@@ -125,7 +125,7 @@ ignore_missing_imports = true
 
 # Less strict for config modules during transition
 [[tool.mypy.overrides]]
-module = "src.weather_config.*"
+module = "src.config.*"
 disallow_untyped_defs = false
 warn_return_any = false
 
@@ -136,7 +136,7 @@ ignore_errors = true
 
 # Less strict for debug utils (needs separate typing effort)
 [[tool.mypy.overrides]]
-module = "src.weather_utils.debug_utils"
+module = "src.utils.debug_utils"
 ignore_errors = true
 
 # Less strict for DAGs (Airflow dynamic imports)
@@ -157,7 +157,7 @@ addopts = [
     "--strict-markers",
     "--tb=short",
     "--cov=src",
-    "--cov-report=html:htmlcov",
+    "--cov-report=html:tests/htmlcov",
     "--cov-report=term-missing:skip-covered",
     "--cov-fail-under=60"
 ]
@@ -169,7 +169,7 @@ markers = [
     "api: Tests that mock external APIs",
     "data_quality: Data quality validation tests"
 ]
-norecursedirs = [".git", "__pycache__", "htmlcov", ".pytest_cache"]
+norecursedirs = [".git", "__pycache__", "tests/htmlcov", ".pytest_cache"]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s"
@@ -207,7 +207,7 @@ show_missing = true
 skip_covered = true
 
 [tool.coverage.html]
-directory = "htmlcov"
+directory = "tests/htmlcov"
 
 # ============================================================================
 # RUFF - Fast Python Linter (Alternative to flake8)
@@ -220,7 +220,7 @@ exclude = [
     "__pycache__",
     ".venv",
     "venv",
-    "htmlcov",
+    "tests/htmlcov",
     "build",
     "dist"
 ]

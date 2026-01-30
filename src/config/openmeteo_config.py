@@ -9,9 +9,9 @@ Airflow Connections when available, with fallback to environment variables.
 import os
 
 try:
-    from src.weather_config.secrets_manager import get_openmeteo_api_key
+    from src.config.secrets_manager import get_openmeteo_api_key
 except ImportError:
-    from weather_config.secrets_manager import get_openmeteo_api_key  # type: ignore[no-redef]
+    from config.secrets_manager import get_openmeteo_api_key  # type: ignore[no-redef]
 
 # API Key (optional - not required for non-commercial use)
 _api_key = None

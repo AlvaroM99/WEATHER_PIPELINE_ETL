@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from src.weather_config.lake_config import (
+from src.config.lake_config import (
     BRONZE_AEMET_BUCKET,
     BRONZE_BUCKET,
     BRONZE_OPENMETEO_BUCKET,
@@ -22,7 +22,7 @@ from src.weather_config.lake_config import (
     SILVER_OPENMETEO_BUCKET,
     SILVER_PATH_TEMPLATE,
 )
-from src.weather_utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient
 
 # Type aliases for common patterns
 AirflowContext = Dict[str, Any]

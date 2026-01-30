@@ -9,7 +9,7 @@ import responses
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from src.weather_utils.http_utils import get_retrying_session
+from src.utils.http_utils import get_retrying_session
 
 
 @pytest.mark.unit

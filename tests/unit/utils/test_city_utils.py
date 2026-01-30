@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import responses
 
-from src.weather_utils.city_utils import (
+from src.utils.city_utils import (
     get_capitals_dataframe,
     get_cities,
     get_coastal_cities,
@@ -30,7 +30,7 @@ def test_load_cities_from_github_success(sample_github_csv):
     responses.add(responses.GET, GITHUB_CSV_URL, body=sample_github_csv, status=200)
 
     # Clear cache first
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     city_utils._cities_cache = None
 
@@ -57,7 +57,7 @@ def test_load_cities_from_github_network_error():
     responses.add(responses.GET, GITHUB_CSV_URL, body="Connection error", status=500)
 
     # Clear cache
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     city_utils._cities_cache = None
 
@@ -69,7 +69,7 @@ def test_load_cities_from_github_network_error():
 @pytest.mark.unit
 def test_caching_mechanism():
     """Test that cities are cached and not downloaded twice"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache with sample data
     sample_df = pd.DataFrame(
@@ -100,7 +100,7 @@ def test_caching_mechanism():
 @pytest.mark.unit
 def test_get_cities_format(sample_github_csv):
     """Test get_cities() returns correct format for OpenWeather API"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache with sample data
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
@@ -134,7 +134,7 @@ def test_get_cities_format(sample_github_csv):
 @pytest.mark.unit
 def test_get_capitals_dataframe_format(sample_github_csv):
     """Test get_capitals_dataframe() returns correct format for Open-Meteo API"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
@@ -170,7 +170,7 @@ def test_get_capitals_dataframe_format(sample_github_csv):
 @pytest.mark.unit
 def test_get_coastal_cities(sample_github_csv):
     """Test get_coastal_cities() filters only coastal cities"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
@@ -205,7 +205,7 @@ def test_get_coastal_cities(sample_github_csv):
 @pytest.mark.unit
 def test_empty_dataframe_handling():
     """Test handling of empty DataFrame"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache with empty DataFrame
     city_utils._cities_cache = pd.DataFrame()
@@ -231,7 +231,7 @@ def test_required_columns_validation(sample_github_csv):
     responses.add(responses.GET, GITHUB_CSV_URL, body=invalid_csv, status=200)
 
     # Clear cache
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     city_utils._cities_cache = None
 
@@ -243,7 +243,7 @@ def test_required_columns_validation(sample_github_csv):
 @pytest.mark.unit
 def test_coordinates_are_numeric(sample_github_csv):
     """Test that latitude and longitude are properly converted to numeric"""
-    import src.weather_utils.city_utils as city_utils
+    import src.utils.city_utils as city_utils
 
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))

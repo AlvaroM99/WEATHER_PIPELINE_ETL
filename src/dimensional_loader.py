@@ -15,7 +15,7 @@ import pandas as pd
 import psycopg2
 import requests
 
-from src.weather_config.app_config import (
+from src.config.app_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,

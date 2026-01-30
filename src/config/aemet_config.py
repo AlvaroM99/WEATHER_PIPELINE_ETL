@@ -9,9 +9,9 @@ Airflow Connections when available, with fallback to environment variables.
 import os
 
 try:
-    from src.weather_config.secrets_manager import get_aemet_api_key
+    from src.config.secrets_manager import get_aemet_api_key
 except ImportError:
-    from weather_config.secrets_manager import get_aemet_api_key  # type: ignore[no-redef]
+    from config.secrets_manager import get_aemet_api_key  # type: ignore[no-redef]
 
 # API Key (via SecretsManager)
 _api_key = None

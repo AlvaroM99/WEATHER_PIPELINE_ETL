@@ -18,18 +18,18 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 from src.dimensional_loader import DimensionalLoader
-from src.weather_config.app_config import (
+from src.config.app_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_USER,
 )
-from src.weather_config.lake_config import (
+from src.config.lake_config import (
     SILVER_AEMET_BUCKET,
     SILVER_OPENWEATHER_BUCKET,
     SILVER_PATH_TEMPLATE,
 )
-from src.weather_utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient
 
 # Type aliases for common patterns
 AirflowContext = Dict[str, Any]

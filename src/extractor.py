@@ -16,22 +16,22 @@ import pandas as pd
 import requests
 import urllib3
 
-from src.weather_config.aemet_config import (
+from src.config.aemet_config import (
     AEMET_BASE_URL,
 )
-from src.weather_config.aemet_config import ENDPOINTS as AEMET_ENDPOINTS
-from src.weather_config.aemet_config import REQUEST_TIMEOUT as AEMET_TIMEOUT
-from src.weather_config.aemet_config import get_api_key as get_aemet_api_key
+from src.config.aemet_config import ENDPOINTS as AEMET_ENDPOINTS
+from src.config.aemet_config import REQUEST_TIMEOUT as AEMET_TIMEOUT
+from src.config.aemet_config import get_api_key as get_aemet_api_key
 
 # Import configuration and utils
-from src.weather_config.app_config import API_KEY
-from src.weather_config.lake_config import (
+from src.config.app_config import API_KEY
+from src.config.lake_config import (
     BRONZE_AEMET_BUCKET,
     BRONZE_BUCKET,
     BRONZE_OPENMETEO_BUCKET,
     BRONZE_PATH_TEMPLATE,
 )
-from src.weather_config.openmeteo_config import (
+from src.config.openmeteo_config import (
     AIR_QUALITY_PARAMS,
     DAILY_FORECAST_PARAMS,
     DEFAULT_TIMEZONE,
@@ -44,9 +44,9 @@ from src.weather_config.openmeteo_config import (
     OPENMETEO_POLLEN_URL,
     POLLEN_PARAMS,
 )
-from src.weather_utils.city_utils import get_capitals_dataframe, get_cities
-from src.weather_utils.http_utils import get_retrying_session
-from src.weather_utils.minio_client import MinIOClient
+from src.utils.city_utils import get_capitals_dataframe, get_cities
+from src.utils.http_utils import get_retrying_session
+from src.utils.minio_client import MinIOClient
 
 # Type aliases for common patterns
 AirflowContext = Dict[str, Any]
