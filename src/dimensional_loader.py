@@ -389,7 +389,7 @@ class DimensionalLoader(BaseETLLogger):
                 f"('{s[0]}', '{s[1]}', '{s[2]}', {s[3]}, {s[4]}, {s[5]})" for s in DEFAULT_STATIONS
             )
 
-            cur.execute(f"""  # nosec B608
+            cur.execute(f"""
                 INSERT INTO dwh.dim_aemet_stations (
                     station_id, station_name, province, altitude, latitude, longitude
                 ) VALUES {values_list}

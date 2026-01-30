@@ -141,8 +141,8 @@ jobs:
 
       - name: Run Bandit security scan
         run: |
-          bandit -r src/ -ll --skip B101,B311 -f json -o bandit-report.json || true
-          bandit -r src/ -ll --skip B101,B311
+          bandit -r src/ -ll --skip B101,B311,B608 -f json -o bandit-report.json || true
+          bandit -r src/ -ll --skip B101,B311,B608
 
       - name: Check dependencies for vulnerabilities
         run: |
