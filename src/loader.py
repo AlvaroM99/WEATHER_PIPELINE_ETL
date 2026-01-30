@@ -17,7 +17,6 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-from src.dimensional_loader import DimensionalLoader
 from src.config.database_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
@@ -29,6 +28,7 @@ from src.config.lake_config import (
     SILVER_OPENWEATHER_BUCKET,
     SILVER_PATH_TEMPLATE,
 )
+from src.dimensional_loader import DimensionalLoader
 from src.type_aliases import AirflowContext, CityIdMapping, MapperFunction, RecordTuple
 from src.utils.etl_logger import BaseETLLogger
 from src.utils.minio_client import MinIOClient
