@@ -42,7 +42,7 @@ env/
 ENV/
 
 # Test coverage
-.coverage
+tests/.coverage
 tests/htmlcov/
 
 # Test and type checking caches

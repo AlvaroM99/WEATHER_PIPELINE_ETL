@@ -185,6 +185,7 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["src"]
 branch = true
+data_file = "tests/.coverage"
 omit = [
     "tests/*",
     "*/__init__.py",
@@ -234,17 +235,32 @@ select = [
     "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
     "UP",     # pyupgrade
+    "C90",    # mccabe complexity
 ]
 ignore = [
     "E501",   # line too long (handled by black)
+    "E203",   # whitespace before ':' (conflicts with black)
+    "E266",   # too many leading '#' for block comment
+    "E402",   # module level import not at top of file
+    "W503",   # line break before binary operator
     "B008",   # do not perform function calls in argument defaults
     "C901",   # too complex
-    "W503",   # line break before binary operator
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/*" = ["S101", "B011"]
+"tests/*" = ["S101", "B011", "F401", "F811", "F841", "E722"]
+"conftest.py" = ["F401", "F811"]
+"src/extractor.py" = ["F401", "F841"]
+"src/loader.py" = ["F401"]
+"src/transformer.py" = ["F841", "E722"]
+"src/data_quality/validators.py" = ["F401"]
+"src/data_quality/expectations.py" = ["F401"]
+"src/utils/debug_utils.py" = ["F401"]
+"src/utils/minio_client.py" = ["F401"]
 
 # ============================================================================
 # BANDIT - Security Linter

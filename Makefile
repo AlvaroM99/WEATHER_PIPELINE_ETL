@@ -1,7 +1,7 @@
 # Makefile for Weather Pipeline ETL
 # Run commands with: make <target>
 
-.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean coverage pre-commit docker-up docker-down
+.PHONY: help install install-dev install-test test test-unit test-integration lint format typecheck security clean coverage pre-commit docker-up docker-down
 
 # Default target
 help:
@@ -9,8 +9,9 @@ help:
 	@echo "=========================================="
 	@echo ""
 	@echo "Setup:"
-	@echo "  install        Install production dependencies"
-	@echo "  install-dev    Install all development dependencies"
+	@echo "  install        Install production dependencies (requirements/base.txt)"
+	@echo "  install-test   Install testing dependencies (requirements/test.txt)"
+	@echo "  install-dev    Install all development dependencies (requirements/dev.txt)"
 	@echo "  pre-commit     Install and setup pre-commit hooks"
 	@echo ""
 	@echo "Testing:"
@@ -41,11 +42,15 @@ help:
 
 install:
 	pip install --upgrade pip
-	pip install -r requirements.txt
+	pip install -r requirements/base.txt
 
 install-dev:
 	pip install --upgrade pip
-	pip install -r requirements-dev.txt
+	pip install -r requirements/dev.txt
+
+install-test:
+	pip install --upgrade pip
+	pip install -r requirements/test.txt
 
 pre-commit:
 	pip install pre-commit
@@ -69,17 +74,17 @@ test-fast:
 	pytest tests/ -v -x --no-cov -m "not slow and not database"
 
 coverage:
-	pytest tests/ --cov=src --cov-report=html --cov-report=xml
-	@echo "Coverage report generated in htmlcov/"
-	@echo "Open htmlcov/index.html in your browser"
+	pytest tests/ --cov=src --cov-report=html:tests/htmlcov --cov-report=xml
+	@echo "Coverage report generated in tests/htmlcov/"
+	@echo "Open tests/htmlcov/index.html in your browser"
 
 # ============================================================================
 # CODE QUALITY
 # ============================================================================
 
 lint:
-	@echo "Running flake8..."
-	flake8 src/ tests/
+	@echo "Running ruff..."
+	ruff check src/ tests/
 	@echo "Running mypy..."
 	mypy src/ --ignore-missing-imports
 
@@ -136,8 +141,7 @@ clean:
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	find . -type f -name ".coverage" -delete 2>/dev/null || true
-	rm -rf htmlcov/ coverage.xml .coverage 2>/dev/null || true
+	rm -rf tests/.coverage tests/htmlcov/ coverage.xml 2>/dev/null || true
 	@echo "Clean complete!"
 
 update-deps:

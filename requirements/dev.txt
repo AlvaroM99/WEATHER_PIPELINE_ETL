@@ -1,0 +1,35 @@
+# Development Dependencies
+# Install with: pip install -r requirements/dev.txt
+
+-r test.txt
+
+# Code Formatting
+black==24.1.1
+isort==5.13.2
+
+# Linting
+ruff==0.1.14
+
+# Type Checking
+mypy==1.8.0
+pandas-stubs==2.1.4.231227
+types-requests==2.31.0.20240106
+
+# Security
+bandit==1.7.7
+safety==2.3.5
+
+# Pre-commit Hooks
+pre-commit==3.6.0
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.5.4
+
+# Debugging
+ipdb==0.13.13
+ipython==8.20.0
+
+# Profiling
+memory-profiler==0.61.0
+line-profiler==4.1.2
