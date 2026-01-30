@@ -334,3 +334,182 @@ def setup_env(monkeypatch):
     monkeypatch.setenv("MINIO_ACCESS_KEY", "minioadmin")
     monkeypatch.setenv("MINIO_SECRET_KEY", "minioadmin")
     monkeypatch.setenv("MINIO_SECURE", "False")
+    monkeypatch.setenv("AEMET_API_KEY", "test_aemet_api_key")
+
+
+# ===== AEMET Fixtures =====
+
+
+@pytest.fixture
+def sample_aemet_stations_response():
+    """Sample AEMET stations API response"""
+    return [
+        {
+            "indicativo": "3129",
+            "nombre": "MADRID, RETIRO",
+            "provincia": "MADRID",
+            "altitud": "667",
+            "latitud": "402455N",
+            "longitud": "034041W",
+            "indsinop": "08221",
+        },
+        {
+            "indicativo": "0076",
+            "nombre": "BARCELONA, FABRA",
+            "provincia": "BARCELONA",
+            "altitud": "412",
+            "latitud": "412512N",
+            "longitud": "021730E",
+            "indsinop": "08181",
+        },
+    ]
+
+
+@pytest.fixture
+def sample_aemet_daily_response():
+    """Sample AEMET daily climatology API response"""
+    return [
+        {
+            "fecha": "2026-01-29",
+            "indicativo": "3129",
+            "nombre": "MADRID, RETIRO",
+            "provincia": "MADRID",
+            "tmed": "8,5",
+            "tmin": "2,3",
+            "tmax": "14,7",
+            "prec": "0,0",
+            "velmedia": "2,8",
+            "racha": "8,3",
+            "dir": "270",
+            "sol": "7,5",
+            "presMax": "1025,3",
+            "presMin": "1020,1",
+            "hrMedia": "55",
+            "hrMin": "30",
+            "hrMax": "80",
+        },
+        {
+            "fecha": "2026-01-28",
+            "indicativo": "3129",
+            "nombre": "MADRID, RETIRO",
+            "provincia": "MADRID",
+            "tmed": "7,2",
+            "tmin": "1,5",
+            "tmax": "13,0",
+            "prec": "2,5",
+            "velmedia": "3,5",
+            "racha": "12,5",
+            "dir": "315",
+            "sol": "5,2",
+            "presMax": "1022,0",
+            "presMin": "1018,5",
+            "hrMedia": "65",
+            "hrMin": "40",
+            "hrMax": "90",
+        },
+    ]
+
+
+@pytest.fixture
+def sample_aemet_bronze_data():
+    """Sample AEMET bronze layer data structure"""
+    return {
+        "stations": [
+            {
+                "indicativo": "3129",
+                "nombre": "MADRID, RETIRO",
+                "provincia": "MADRID",
+                "altitud": "667",
+                "latitud": "402455N",
+                "longitud": "034041W",
+                "indsinop": "08221",
+            }
+        ],
+        "_metadata": {
+            "extraction_timestamp": "20260129_120000",
+            "execution_date": "2026-01-29",
+            "station_count": 1,
+        },
+    }
+
+
+@pytest.fixture
+def sample_aemet_daily_bronze_data():
+    """Sample AEMET daily climatology bronze data"""
+    return {
+        "station_id": "3129",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-29",
+        "records": [
+            {
+                "fecha": "2026-01-29",
+                "indicativo": "3129",
+                "nombre": "MADRID, RETIRO",
+                "provincia": "MADRID",
+                "tmed": "8,5",
+                "tmin": "2,3",
+                "tmax": "14,7",
+                "prec": "0,0",
+            }
+        ],
+        "_metadata": {
+            "extraction_timestamp": "20260129_120000",
+            "execution_date": "2026-01-29",
+            "record_count": 1,
+        },
+    }
+
+
+@pytest.fixture
+def sample_aemet_silver_df():
+    """Sample AEMET silver layer DataFrame for stations"""
+    return pd.DataFrame(
+        [
+            {
+                "station_id": "3129",
+                "station_name": "MADRID, RETIRO",
+                "province": "MADRID",
+                "altitude": 667.0,
+                "latitude": 40.415278,
+                "longitude": -3.678056,
+                "synop_code": "08221",
+            },
+            {
+                "station_id": "0076",
+                "station_name": "BARCELONA, FABRA",
+                "province": "BARCELONA",
+                "altitude": 412.0,
+                "latitude": 41.419444,
+                "longitude": 2.291667,
+                "synop_code": "08181",
+            },
+        ]
+    )
+
+
+@pytest.fixture
+def sample_aemet_daily_silver_df():
+    """Sample AEMET daily climatology silver DataFrame"""
+    return pd.DataFrame(
+        [
+            {
+                "station_id": "3129",
+                "station_name": "MADRID, RETIRO",
+                "province": "MADRID",
+                "date": "2026-01-29",
+                "temp_avg": 8.5,
+                "temp_min": 2.3,
+                "temp_max": 14.7,
+                "precipitation": 0.0,
+                "wind_speed_avg": 2.8,
+                "wind_gust_max": 8.3,
+                "wind_direction": 270.0,
+                "sunshine_hours": 7.5,
+                "pressure_max": 1025.3,
+                "pressure_min": 1020.1,
+                "humidity_avg": 55.0,
+                "humidity_min": 30.0,
+                "humidity_max": 80.0,
+            }
+        ]
+    )
