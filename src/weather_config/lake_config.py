@@ -84,3 +84,6 @@ OPENMETEO_MARINE_PATH = "marine/{date}/marine_{timestamp}.json"
 
 # AEMET (Spanish meteorological service)
 AEMET_PATH_TEMPLATE = "aemet/{endpoint}/{date}/{timestamp}.json"
+AEMET_STATIONS_PATH = "stations/{date}/stations_{timestamp}.json"
+AEMET_DAILY_CLIMATOLOGY_PATH = "climatology/daily/{date}/daily_{station}_{timestamp}.json"
+AEMET_HISTORICAL_PATH = "historical/{year}/{station}/historical_{start}_{end}_{timestamp}.json"

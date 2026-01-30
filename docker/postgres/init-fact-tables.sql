@@ -242,3 +242,51 @@ CREATE TABLE IF NOT EXISTS dwh.fct_marine (
 );
 
 COMMENT ON TABLE dwh.fct_marine IS 'Marine weather forecasts from Open-Meteo API (Coastal Cities)';
+
+-- ============================================================================
+-- FCT_AEMET_DAILY_WEATHER - AEMET Daily Climatological Data
+-- Historical and current daily weather observations from AEMET stations
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS dwh.fct_aemet_daily_weather (
+    -- Foreign Keys
+    station_id INTEGER REFERENCES dwh.dim_aemet_stations(id),
+    date_id INTEGER REFERENCES dwh.dim_date(id_calendar_day),
+    extraction_date_id INTEGER REFERENCES dwh.dim_date(id_calendar_day),
+
+    -- Temperature (C)
+    temp_avg DECIMAL(5,2),
+    temp_min DECIMAL(5,2),
+    temp_max DECIMAL(5,2),
+
+    -- Precipitation (mm)
+    precipitation DECIMAL(6,2),
+
+    -- Wind
+    wind_speed_avg DECIMAL(5,2),
+    wind_gust_max DECIMAL(5,2),
+    wind_direction INTEGER,
+
+    -- Solar
+    sunshine_hours DECIMAL(4,2),
+
+    -- Atmospheric Pressure (hPa)
+    pressure_max DECIMAL(7,2),
+    pressure_min DECIMAL(7,2),
+
+    -- Humidity (%)
+    humidity_avg DECIMAL(5,2),
+    humidity_min DECIMAL(5,2),
+    humidity_max DECIMAL(5,2),
+
+    -- Metadata
+    data_source VARCHAR(20) DEFAULT 'AEMET',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (station_id, date_id, extraction_date_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fct_aemet_station_date ON dwh.fct_aemet_daily_weather(station_id, date_id);
+CREATE INDEX IF NOT EXISTS idx_fct_aemet_date ON dwh.fct_aemet_daily_weather(date_id);
+CREATE INDEX IF NOT EXISTS idx_fct_aemet_extraction ON dwh.fct_aemet_daily_weather(extraction_date_id);
+
+COMMENT ON TABLE dwh.fct_aemet_daily_weather IS 'Daily climatological data from AEMET (Spanish Meteorological Agency) - Historical 2020-2025 and current observations';

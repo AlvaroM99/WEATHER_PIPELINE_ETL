@@ -1108,3 +1108,327 @@ def test_extract_openmeteo_daily_empty_dataframe(mock_get_capitals, MockMinIOCla
     # Assert
     assert result == 0
     assert mock_minio_instance.upload_json.call_count == 0
+
+
+# ===== AEMET Extraction Tests =====
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_aemet_request_success(mock_get_api_key, MockMinIOClass, sample_aemet_stations_response):
+    """Test successful AEMET API two-step request"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_aemet_api_key"
+
+    # Step 1: Initial request returns data URL
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones",
+        json={"estado": 200, "datos": "https://opendata.aemet.es/data/stations.json"},
+        status=200,
+    )
+
+    # Step 2: Data URL returns actual data
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/data/stations.json",
+        json=sample_aemet_stations_response,
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor._aemet_request(
+        "/valores/climatologicos/inventarioestaciones/todasestaciones"
+    )
+
+    assert result is not None
+    assert len(result) == 2
+    assert result[0]["indicativo"] == "3129"
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_aemet_request_no_api_key(mock_get_api_key, MockMinIOClass):
+    """Test AEMET request fails when no API key"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = None
+
+    extractor = Extractor()
+    result = extractor._aemet_request("/test/endpoint")
+
+    assert result is None
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_aemet_request_api_error(mock_get_api_key, MockMinIOClass):
+    """Test AEMET request handles API errors"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # API returns error status
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/test/endpoint",
+        json={"estado": 404, "descripcion": "Not found"},
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor._aemet_request("/test/endpoint")
+
+    assert result is None
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_extract_aemet_stations_success(
+    mock_get_api_key, MockMinIOClass, sample_aemet_stations_response, mock_airflow_context
+):
+    """Test successful AEMET stations extraction"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # Step 1: Initial request
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones",
+        json={"estado": 200, "datos": "https://opendata.aemet.es/data/stations.json"},
+        status=200,
+    )
+
+    # Step 2: Data URL
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/data/stations.json",
+        json=sample_aemet_stations_response,
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor.extract_aemet_stations(**mock_airflow_context)
+
+    assert result == 1  # Returns 1 for the file uploaded
+    assert mock_minio_instance.upload_json.called
+
+    # Verify uploaded data structure
+    call_args = mock_minio_instance.upload_json.call_args
+    bucket = call_args[0][0]
+    uploaded_data = call_args[0][2]
+
+    assert bucket == "bronze-aemet"
+    assert "stations" in uploaded_data
+    assert "_metadata" in uploaded_data
+    assert uploaded_data["_metadata"]["station_count"] == 2
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_extract_aemet_stations_no_data(mock_get_api_key, MockMinIOClass):
+    """Test AEMET stations extraction with no data"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # API returns error
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/inventarioestaciones/todasestaciones",
+        json={"estado": 401, "descripcion": "Unauthorized"},
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor.extract_aemet_stations(ds="2026-01-29")
+
+    assert result == 0
+    assert not mock_minio_instance.upload_json.called
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_extract_aemet_daily_climatology_success(
+    mock_get_api_key, MockMinIOClass, sample_aemet_daily_response, mock_airflow_context
+):
+    """Test successful AEMET daily climatology extraction"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # Mock API response for each station (we use 1 station for simplicity)
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/2025-12-30T00:00:00UTC/fechafin/2026-01-29T23:59:59UTC/estacion/3129",
+        json={"estado": 200, "datos": "https://opendata.aemet.es/data/daily.json"},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/data/daily.json",
+        json=sample_aemet_daily_response,
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor.extract_aemet_daily_climatology(station_ids=["3129"], **mock_airflow_context)
+
+    assert result == 1  # 1 station file uploaded
+    assert mock_minio_instance.upload_json.called
+
+    # Verify uploaded data
+    call_args = mock_minio_instance.upload_json.call_args
+    bucket = call_args[0][0]
+    uploaded_data = call_args[0][2]
+
+    assert bucket == "bronze-aemet"
+    assert uploaded_data["station_id"] == "3129"
+    assert "records" in uploaded_data
+    assert uploaded_data["_metadata"]["record_count"] == 2
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_extract_aemet_daily_climatology_partial_failure(mock_get_api_key, MockMinIOClass):
+    """Test AEMET daily extraction handles station failures"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # First station succeeds
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/2025-12-30T00:00:00UTC/fechafin/2026-01-29T23:59:59UTC/estacion/3129",
+        json={"estado": 200, "datos": "https://opendata.aemet.es/data/daily1.json"},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/data/daily1.json",
+        json=[{"fecha": "2026-01-29", "tmed": "10,0"}],
+        status=200,
+    )
+
+    # Second station fails
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/2025-12-30T00:00:00UTC/fechafin/2026-01-29T23:59:59UTC/estacion/0076",
+        json={"estado": 404, "descripcion": "No data"},
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor.extract_aemet_daily_climatology(
+        station_ids=["3129", "0076"], ds="2026-01-29"
+    )
+
+    # Should return 1 (only first station succeeded)
+    assert result == 1
+
+
+@pytest.mark.unit
+@patch("src.extractor.MinIOClient")
+def test_extract_aemet_stations_xcom_push(MockMinIOClass, mock_airflow_context):
+    """Test AEMET stations extraction pushes to XCom"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.upload_json.return_value = 1024
+    MockMinIOClass.return_value = mock_minio_instance
+
+    extractor = Extractor()
+
+    # Mock the _aemet_request method to avoid API call
+    extractor._aemet_request = Mock(return_value=[{"indicativo": "3129", "nombre": "Madrid"}])
+
+    result = extractor.extract_aemet_stations(**mock_airflow_context)
+
+    # Verify XCom push was called
+    mock_ti = mock_airflow_context["task_instance"]
+    assert mock_ti.xcom_push.called
+
+    xcom_calls = [call[1] for call in mock_ti.xcom_push.call_args_list]
+    keys_pushed = [call["key"] for call in xcom_calls]
+    assert "aemet_stations_objects" in keys_pushed
+
+
+@pytest.mark.unit
+@patch("src.extractor.MinIOClient")
+def test_extractor_log_methods(MockMinIOClass):
+    """Test extractor logging utility methods"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    extractor = Extractor()
+
+    # Test log methods don't raise errors
+    extractor.log_start("Test start message")
+    extractor.log_end("Test end message")
+    extractor.log_error("Test error message")
+    extractor.log_error("Test error with exception", Exception("Test exception"))
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_aemet_request_no_data_url(mock_get_api_key, MockMinIOClass):
+    """Test AEMET request handles missing data URL"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # API returns success but no data URL
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/test/endpoint",
+        json={"estado": 200, "descripcion": "OK"},  # Missing 'datos' field
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor._aemet_request("/test/endpoint")
+
+    assert result is None
+
+
+@pytest.mark.unit
+@responses.activate
+@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_aemet_api_key")
+def test_aemet_request_json_decode_error(mock_get_api_key, MockMinIOClass):
+    """Test AEMET request handles JSON decode errors"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_api_key.return_value = "test_api_key"
+
+    # API returns invalid JSON
+    responses.add(
+        responses.GET,
+        "https://opendata.aemet.es/opendata/api/test/endpoint",
+        body="not valid json",
+        status=200,
+    )
+
+    extractor = Extractor()
+    result = extractor._aemet_request("/test/endpoint")
+
+    assert result is None

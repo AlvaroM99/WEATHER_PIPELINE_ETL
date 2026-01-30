@@ -14,8 +14,10 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from src.weather_config.lake_config import (
+    BRONZE_AEMET_BUCKET,
     BRONZE_BUCKET,
     BRONZE_OPENMETEO_BUCKET,
+    SILVER_AEMET_BUCKET,
     SILVER_BUCKET,
     SILVER_OPENMETEO_BUCKET,
     SILVER_PATH_TEMPLATE,
@@ -408,3 +410,341 @@ class Transformer:
             except Exception:
                 continue
         return None
+
+    # ========================================================================
+    # AEMET Transformations
+    # ========================================================================
+
+    def transform_aemet_stations(self, **context: Any) -> int:
+        """
+        Transform AEMET stations inventory from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
+        self.log_start("Transforming AEMET Stations inventory")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Try to get from XCom first
+        bronze_objects: Optional[List[BronzeObject]] = self._get_upstream_data(
+            context, ["extract_aemet_stations"], "aemet_stations_objects"
+        )
+
+        # Fallback: scan bronze bucket
+        if not bronze_objects:
+            prefix: str = f"stations/{execution_date}/"
+            try:
+                objects = list(
+                    self.minio_client.client.list_objects(
+                        BRONZE_AEMET_BUCKET, prefix=prefix, recursive=True
+                    )
+                )
+                bronze_objects = [
+                    {"object_path": obj.object_name}
+                    for obj in objects
+                    if obj.object_name.endswith(".json")
+                ]
+            except Exception:
+                pass
+
+        if not bronze_objects:
+            self.logger.warning("No AEMET stations data to transform")
+            return 0
+
+        all_stations: List[TransformedRecord] = []
+
+        for bronze_obj in bronze_objects:
+            try:
+                object_path: Optional[str] = bronze_obj.get("object_path")
+                if not object_path:
+                    continue
+
+                data: Dict[str, Any] = self.minio_client.read_json(BRONZE_AEMET_BUCKET, object_path)
+
+                stations = data.get("stations", [])
+                for station in stations:
+                    transformed: TransformedRecord = {
+                        "station_id": station.get("indicativo"),
+                        "station_name": station.get("nombre"),
+                        "province": station.get("provincia"),
+                        "altitude": self._safe_float(station.get("altitud")),
+                        "latitude": self._parse_aemet_coord(station.get("latitud")),
+                        "longitude": self._parse_aemet_coord(station.get("longitud")),
+                        "synop_code": station.get("indsinop"),
+                        "extraction_date": execution_date,
+                    }
+                    all_stations.append(transformed)
+
+            except Exception as e:
+                self.log_error(f"Error transforming {object_path}", e)
+                continue
+
+        if not all_stations:
+            return 0
+
+        df: pd.DataFrame = pd.DataFrame(all_stations)
+        silver_path: str = f"stations/{execution_date}/stations_{timestamp}.parquet"
+        self.minio_client.upload_parquet(SILVER_AEMET_BUCKET, silver_path, df)
+
+        self.log_end(f"Stored {len(df)} AEMET stations to {silver_path}")
+        return len(df)
+
+    def transform_aemet_daily_climatology(self, **context: Any) -> int:
+        """
+        Transform AEMET daily climatology from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
+        self.log_start("Transforming AEMET Daily Climatology")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Try XCom first
+        bronze_objects: Optional[List[BronzeObject]] = self._get_upstream_data(
+            context, ["extract_aemet_daily_climatology"], "aemet_daily_objects"
+        )
+
+        # Fallback: scan bronze bucket
+        if not bronze_objects:
+            prefix: str = f"climatology/daily/{execution_date}/"
+            try:
+                objects = list(
+                    self.minio_client.client.list_objects(
+                        BRONZE_AEMET_BUCKET, prefix=prefix, recursive=True
+                    )
+                )
+                bronze_objects = [
+                    {"object_path": obj.object_name}
+                    for obj in objects
+                    if obj.object_name.endswith(".json")
+                ]
+            except Exception:
+                pass
+
+        if not bronze_objects:
+            self.logger.warning("No AEMET daily climatology data to transform")
+            return 0
+
+        all_records: List[TransformedRecord] = []
+
+        for bronze_obj in bronze_objects:
+            try:
+                object_path: Optional[str] = bronze_obj.get("object_path")
+                if not object_path:
+                    continue
+
+                data: Dict[str, Any] = self.minio_client.read_json(BRONZE_AEMET_BUCKET, object_path)
+
+                station_id = data.get("station_id")
+                records = data.get("records", [])
+
+                for record in records:
+                    transformed: TransformedRecord = {
+                        "station_id": station_id,
+                        "station_name": record.get("nombre"),
+                        "province": record.get("provincia"),
+                        "date": record.get("fecha"),
+                        "temp_avg": self._safe_float(record.get("tmed")),
+                        "temp_min": self._safe_float(record.get("tmin")),
+                        "temp_max": self._safe_float(record.get("tmax")),
+                        "precipitation": self._safe_float(record.get("prec")),
+                        "wind_speed_avg": self._safe_float(record.get("velmedia")),
+                        "wind_gust_max": self._safe_float(record.get("racha")),
+                        "wind_direction": self._safe_float(record.get("dir")),
+                        "sunshine_hours": self._safe_float(record.get("sol")),
+                        "pressure_max": self._safe_float(record.get("presMax")),
+                        "pressure_min": self._safe_float(record.get("presMin")),
+                        "humidity_avg": self._safe_float(record.get("hrMedia")),
+                        "humidity_min": self._safe_float(record.get("hrMin")),
+                        "humidity_max": self._safe_float(record.get("hrMax")),
+                        "extraction_date": execution_date,
+                    }
+                    all_records.append(transformed)
+
+            except Exception as e:
+                self.log_error(f"Error transforming {object_path}", e)
+                continue
+
+        if not all_records:
+            return 0
+
+        df: pd.DataFrame = pd.DataFrame(all_records)
+        silver_path: str = (
+            f"climatology/daily/{execution_date}/daily_climatology_{timestamp}.parquet"
+        )
+        self.minio_client.upload_parquet(SILVER_AEMET_BUCKET, silver_path, df)
+
+        self.log_end(f"Stored {len(df)} AEMET daily records to {silver_path}")
+        return len(df)
+
+    def transform_aemet_historical(self, **context: Any) -> int:
+        """
+        Transform AEMET historical data from JSON to Parquet.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+
+        Returns:
+            Number of transformed records
+        """
+        self.log_start("Transforming AEMET Historical data")
+
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Try XCom first
+        bronze_objects: Optional[List[BronzeObject]] = self._get_upstream_data(
+            context, ["extract_aemet_historical"], "aemet_historical_objects"
+        )
+
+        # Fallback: scan bronze bucket for all historical data
+        if not bronze_objects:
+            prefix: str = "historical/"
+            try:
+                objects = list(
+                    self.minio_client.client.list_objects(
+                        BRONZE_AEMET_BUCKET, prefix=prefix, recursive=True
+                    )
+                )
+                bronze_objects = [
+                    {"object_path": obj.object_name}
+                    for obj in objects
+                    if obj.object_name.endswith(".json")
+                ]
+            except Exception:
+                pass
+
+        if not bronze_objects:
+            self.logger.warning("No AEMET historical data to transform")
+            return 0
+
+        all_records: List[TransformedRecord] = []
+
+        for bronze_obj in bronze_objects:
+            try:
+                object_path: Optional[str] = bronze_obj.get("object_path")
+                if not object_path:
+                    continue
+
+                data: Dict[str, Any] = self.minio_client.read_json(BRONZE_AEMET_BUCKET, object_path)
+
+                station_id = data.get("station_id")
+                year = data.get("year")
+                records = data.get("records", [])
+
+                for record in records:
+                    transformed: TransformedRecord = {
+                        "station_id": station_id,
+                        "station_name": record.get("nombre"),
+                        "province": record.get("provincia"),
+                        "date": record.get("fecha"),
+                        "year": year,
+                        "temp_avg": self._safe_float(record.get("tmed")),
+                        "temp_min": self._safe_float(record.get("tmin")),
+                        "temp_max": self._safe_float(record.get("tmax")),
+                        "precipitation": self._safe_float(record.get("prec")),
+                        "wind_speed_avg": self._safe_float(record.get("velmedia")),
+                        "wind_gust_max": self._safe_float(record.get("racha")),
+                        "wind_direction": self._safe_float(record.get("dir")),
+                        "sunshine_hours": self._safe_float(record.get("sol")),
+                        "pressure_max": self._safe_float(record.get("presMax")),
+                        "pressure_min": self._safe_float(record.get("presMin")),
+                        "humidity_avg": self._safe_float(record.get("hrMedia")),
+                        "humidity_min": self._safe_float(record.get("hrMin")),
+                        "humidity_max": self._safe_float(record.get("hrMax")),
+                        "extraction_date": execution_date,
+                    }
+                    all_records.append(transformed)
+
+            except Exception as e:
+                self.log_error(f"Error transforming {object_path}", e)
+                continue
+
+        if not all_records:
+            return 0
+
+        df: pd.DataFrame = pd.DataFrame(all_records)
+        silver_path: str = f"historical/{execution_date}/historical_{timestamp}.parquet"
+        self.minio_client.upload_parquet(SILVER_AEMET_BUCKET, silver_path, df)
+
+        self.log_end(f"Stored {len(df)} AEMET historical records to {silver_path}")
+        return len(df)
+
+    # ========================================================================
+    # AEMET Helper Methods
+    # ========================================================================
+
+    def _safe_float(self, value: Any) -> Optional[float]:
+        """
+        Safely convert a value to float, handling AEMET's special formats.
+
+        AEMET uses comma as decimal separator and may have special values.
+
+        Args:
+            value: Value to convert
+
+        Returns:
+            Float value or None if conversion fails
+        """
+        if value is None or value == "" or value == "Ip" or value == "Acum":
+            return None
+        try:
+            # AEMET uses comma as decimal separator
+            if isinstance(value, str):
+                value = value.replace(",", ".")
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    def _parse_aemet_coord(self, coord_str: Optional[str]) -> Optional[float]:
+        """
+        Parse AEMET coordinate format to decimal degrees.
+
+        AEMET coordinates are in format like "403520N" or "034115W"
+        (degrees, minutes, seconds, direction).
+
+        Args:
+            coord_str: Coordinate string in AEMET format
+
+        Returns:
+            Decimal degrees or None if parsing fails
+        """
+        if not coord_str or len(coord_str) < 5:
+            return None
+
+        try:
+            direction = coord_str[-1].upper()
+            coord_str = coord_str[:-1]
+
+            if len(coord_str) == 6:
+                # Format: DDMMSS
+                degrees = int(coord_str[:2])
+                minutes = int(coord_str[2:4])
+                seconds = int(coord_str[4:6])
+            elif len(coord_str) == 5:
+                # Format: DMMSS (longitude without leading zero)
+                degrees = int(coord_str[:1])
+                minutes = int(coord_str[1:3])
+                seconds = int(coord_str[3:5])
+            else:
+                return None
+
+            decimal = degrees + minutes / 60 + seconds / 3600
+
+            if direction in ("S", "W"):
+                decimal = -decimal
+
+            return round(decimal, 6)
+
+        except (ValueError, IndexError):
+            return None

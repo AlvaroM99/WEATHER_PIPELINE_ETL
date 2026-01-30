@@ -826,3 +826,278 @@ def test_get_date_id_edge_cases(MockMinIOClass):
     # Test with timestamp string
     result = loader.get_date_id("2026-01-29T12:00:00")
     assert result == 20260129
+
+
+# ===== AEMET Loader Tests =====
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_get_station_id_mapping(mock_connect, MockMinIOClass, mock_db_connection):
+    """Test get_station_id_mapping returns correct dictionary"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = [("3129", 1), ("0076", 2)]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    station_map = loader.get_station_id_mapping(mock_db_connection)
+
+    assert "3129" in station_map
+    assert station_map["3129"] == 1
+    assert "0076" in station_map
+    assert station_map["0076"] == 2
+
+
+@pytest.mark.unit
+@patch("src.loader.execute_values")
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_aemet_stations_success(
+    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection, sample_aemet_silver_df
+):
+    """Test successful AEMET stations loading"""
+    mock_minio_instance = Mock()
+
+    mock_obj = Mock()
+    mock_obj.object_name = "stations/2026-01-29/stations_20260129_120000.parquet"
+
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+    mock_minio_instance.read_parquet.return_value = sample_aemet_silver_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 2
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_aemet_stations(ds="2026-01-29")
+
+    assert result > 0
+    assert mock_execute_values.called
+
+
+@pytest.mark.unit
+@patch("src.loader.DimensionalLoader")
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_aemet_stations_fallback_to_dimensional_loader(
+    mock_connect, MockMinIOClass, MockDimensionalLoader, mock_db_connection
+):
+    """Test AEMET stations loading falls back to DimensionalLoader when no silver data"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []  # No files
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_dim_loader_instance = Mock()
+    MockDimensionalLoader.return_value = mock_dim_loader_instance
+
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_aemet_stations(ds="2026-01-29")
+
+    # Should return 15 (default stations)
+    assert result == 15
+    assert MockDimensionalLoader.called
+    assert mock_dim_loader_instance.load_dim_aemet_stations.called
+
+
+@pytest.mark.unit
+@patch("src.loader.execute_values")
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_fact_aemet_daily_success(
+    mock_connect,
+    MockMinIOClass,
+    mock_execute_values,
+    mock_db_connection,
+    sample_aemet_daily_silver_df,
+):
+    """Test successful AEMET daily loading"""
+    mock_minio_instance = Mock()
+
+    mock_obj = Mock()
+    mock_obj.object_name = "climatology/daily/2026-01-29/daily_climatology_20260129_120000.parquet"
+
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+    mock_minio_instance.read_parquet.return_value = sample_aemet_daily_silver_df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.rowcount = 1
+    # First call for station mapping, second for data load
+    mock_cursor.fetchall.return_value = [("3129", 1), ("0076", 2)]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_aemet_daily(ds="2026-01-29")
+
+    assert result > 0
+    assert mock_execute_values.called
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_fact_aemet_daily_no_files(mock_connect, MockMinIOClass, mock_db_connection):
+    """Test AEMET daily loading with no files"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = [("3129", 1)]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_aemet_daily(ds="2026-01-29")
+
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.loader.DimensionalLoader")
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_fact_aemet_daily_loads_stations_if_missing(
+    mock_connect, MockMinIOClass, MockDimensionalLoader, mock_db_connection
+):
+    """Test AEMET daily loading loads stations first if missing"""
+    mock_minio_instance = Mock()
+
+    # Return empty list - no files to process
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_dim_loader_instance = Mock()
+    MockDimensionalLoader.return_value = mock_dim_loader_instance
+
+    mock_cursor = Mock()
+    # First call returns empty (no stations), triggers fallback
+    mock_cursor.fetchall.return_value = []
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_aemet_daily(ds="2026-01-29")
+
+    # Should have called DimensionalLoader because no stations found
+    assert MockDimensionalLoader.called
+    assert mock_dim_loader_instance.load_dim_aemet_stations.called
+    # Result is 0 because no files found after loading stations
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_fact_aemet_daily_skips_unknown_stations(
+    mock_connect, MockMinIOClass, mock_db_connection
+):
+    """Test AEMET daily loading skips unknown stations"""
+    mock_minio_instance = Mock()
+
+    mock_obj = Mock()
+    mock_obj.object_name = "climatology/daily/2026-01-29/daily.parquet"
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+
+    # DataFrame with unknown station
+    df = pd.DataFrame([{"station_id": "UNKNOWN", "date": "2026-01-29", "temp_avg": 10.0}])
+    mock_minio_instance.read_parquet.return_value = df
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = [("3129", 1)]  # UNKNOWN not in mapping
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_aemet_daily(ds="2026-01-29")
+
+    # Should return 0 since no matching stations
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+@patch("src.loader.psycopg2.connect")
+def test_load_fact_aemet_historical_no_files(mock_connect, MockMinIOClass, mock_db_connection):
+    """Test AEMET historical loading with no files"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = [("3129", 1)]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    loader = Loader()
+    result = loader.load_fact_aemet_historical(ds="2026-01-29")
+
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+def test_loader_log_methods(MockMinIOClass):
+    """Test loader logging utility methods"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    loader = Loader()
+
+    # Test log methods don't raise errors
+    loader.log_start("Test start message")
+    loader.log_end("Test end message")
+    loader.log_error("Test error message")
+    loader.log_error("Test error with exception", Exception("Test exception"))
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+def test_loader_validation_disabled_by_default(MockMinIOClass):
+    """Test loader validation is disabled when great_expectations not installed"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    # When DATA_QUALITY_AVAILABLE is False, validation should be disabled
+    loader = Loader(enable_validation=True)
+
+    # Should not raise errors
+    result = loader.validate_data(pd.DataFrame(), "unknown_type", "test_table")
+    assert result is None
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+def test_loader_get_quality_report(MockMinIOClass):
+    """Test get_quality_report returns empty dict when no validations run"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    loader = Loader()
+    report = loader.get_quality_report()
+
+    assert isinstance(report, dict)
+
+
+@pytest.mark.unit
+@patch("src.loader.MinIOClient")
+def test_loader_get_validation_result(MockMinIOClass):
+    """Test get_validation_result returns None for unknown table"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    loader = Loader()
+    result = loader.get_validation_result("unknown_table")
+
+    assert result is None

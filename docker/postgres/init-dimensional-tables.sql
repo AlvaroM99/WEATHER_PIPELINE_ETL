@@ -146,3 +146,26 @@ CREATE INDEX IF NOT EXISTS idx_dim_seasons_month ON dwh.dim_seasons(start_month,
 -- dim_layers indexes
 CREATE INDEX IF NOT EXISTS idx_dim_layers_medium ON dwh.dim_layers(medium);
 CREATE INDEX IF NOT EXISTS idx_dim_layers_category ON dwh.dim_layers(layer_category);
+
+-- ============================================================================
+-- DIM_AEMET_STATIONS - AEMET Meteorological Stations Dimension
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS dwh.dim_aemet_stations (
+    id SERIAL PRIMARY KEY,
+    station_id VARCHAR(10) NOT NULL UNIQUE,
+    station_name VARCHAR(100),
+    province VARCHAR(50),
+    altitude DECIMAL(7,2),
+    latitude DECIMAL(9,6),
+    longitude DECIMAL(9,6),
+    synop_code VARCHAR(10),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE dwh.dim_aemet_stations IS 'AEMET meteorological stations dimension (Spanish Meteorological Agency)';
+
+-- dim_aemet_stations indexes
+CREATE INDEX IF NOT EXISTS idx_dim_aemet_stations_id ON dwh.dim_aemet_stations(station_id);
+CREATE INDEX IF NOT EXISTS idx_dim_aemet_stations_province ON dwh.dim_aemet_stations(province);
+CREATE INDEX IF NOT EXISTS idx_dim_aemet_stations_coords ON dwh.dim_aemet_stations(latitude, longitude);

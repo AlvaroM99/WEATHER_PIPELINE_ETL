@@ -832,3 +832,246 @@ def test_get_upstream_data_no_task_instance(MockMinIOClass):
     result = transformer._get_upstream_data({}, ["task1"], "key")
 
     assert result is None
+
+
+# ===== AEMET Transformation Tests =====
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_safe_float_basic(MockMinIOClass):
+    """Test _safe_float handles basic conversions"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    # Test normal values
+    assert transformer._safe_float("10,5") == 10.5  # Spanish decimal
+    assert transformer._safe_float("10.5") == 10.5  # English decimal
+    assert transformer._safe_float(10) == 10.0
+    assert transformer._safe_float(10.5) == 10.5
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_safe_float_special_values(MockMinIOClass):
+    """Test _safe_float handles AEMET special values"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    # Test special AEMET values
+    assert transformer._safe_float(None) is None
+    assert transformer._safe_float("") is None
+    assert transformer._safe_float("Ip") is None  # Precipitation trace
+    assert transformer._safe_float("Acum") is None  # Accumulated
+    assert transformer._safe_float("invalid") is None
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_parse_aemet_coord_latitude(MockMinIOClass):
+    """Test _parse_aemet_coord parses latitude correctly"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    # Madrid: 40°24'55"N -> 40.415278
+    result = transformer._parse_aemet_coord("402455N")
+    assert result is not None
+    assert abs(result - 40.415278) < 0.001
+
+    # Southern latitude
+    result = transformer._parse_aemet_coord("402455S")
+    assert result is not None
+    assert result < 0
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_parse_aemet_coord_longitude(MockMinIOClass):
+    """Test _parse_aemet_coord parses longitude correctly"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    # Madrid: 3°40'41"W -> -3.678056
+    result = transformer._parse_aemet_coord("034041W")
+    assert result is not None
+    assert result < 0  # West is negative
+
+    # Eastern longitude (Barcelona)
+    result = transformer._parse_aemet_coord("021730E")
+    assert result is not None
+    assert result > 0  # East is positive
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_parse_aemet_coord_invalid(MockMinIOClass):
+    """Test _parse_aemet_coord handles invalid inputs"""
+    mock_minio_instance = Mock()
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+
+    assert transformer._parse_aemet_coord(None) is None
+    assert transformer._parse_aemet_coord("") is None
+    assert transformer._parse_aemet_coord("abc") is None
+    assert transformer._parse_aemet_coord("12") is None
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_stations_success(
+    MockMinIOClass, sample_aemet_bronze_data, mock_airflow_context
+):
+    """Test successful AEMET stations transformation"""
+    mock_minio_instance = Mock()
+
+    bronze_objects = [{"object_path": "stations/2026-01-29/stations_20260129_120000.json"}]
+
+    mock_minio_instance.read_json.return_value = sample_aemet_bronze_data
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_stations(**mock_airflow_context)
+
+    assert result > 0
+    assert mock_minio_instance.upload_parquet.called
+
+    # Verify DataFrame structure
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert "station_id" in df.columns
+    assert "station_name" in df.columns
+    assert "latitude" in df.columns
+    assert "longitude" in df.columns
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_stations_fallback_scan(MockMinIOClass, sample_aemet_bronze_data):
+    """Test AEMET stations transformation fallback to bucket scan"""
+    mock_minio_instance = Mock()
+
+    mock_obj = Mock()
+    mock_obj.object_name = "stations/2026-01-29/stations.json"
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+    mock_minio_instance.read_json.return_value = sample_aemet_bronze_data
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_stations(ds="2026-01-29", task_instance=None)
+
+    assert mock_minio_instance.client.list_objects.called
+    if result > 0:
+        assert mock_minio_instance.upload_parquet.called
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_stations_no_data(MockMinIOClass):
+    """Test AEMET stations transformation with no data"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_stations(ds="2026-01-29", task_instance=None)
+
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_daily_climatology_success(
+    MockMinIOClass, sample_aemet_daily_bronze_data, mock_airflow_context
+):
+    """Test successful AEMET daily climatology transformation"""
+    mock_minio_instance = Mock()
+
+    bronze_objects = [
+        {"object_path": "climatology/daily/2026-01-29/daily_3129_20260129_120000.json"}
+    ]
+
+    mock_minio_instance.read_json.return_value = sample_aemet_daily_bronze_data
+    mock_minio_instance.upload_parquet.return_value = 2048
+    mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_daily_climatology(**mock_airflow_context)
+
+    assert result > 0
+    assert mock_minio_instance.upload_parquet.called
+
+    # Verify DataFrame structure
+    call_args = mock_minio_instance.upload_parquet.call_args
+    df = call_args[0][2]
+
+    assert "station_id" in df.columns
+    assert "date" in df.columns
+    assert "temp_avg" in df.columns
+    assert "precipitation" in df.columns
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_daily_climatology_fallback_scan(
+    MockMinIOClass, sample_aemet_daily_bronze_data
+):
+    """Test AEMET daily transformation fallback to bucket scan"""
+    mock_minio_instance = Mock()
+
+    mock_obj = Mock()
+    mock_obj.object_name = "climatology/daily/2026-01-29/daily_3129.json"
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+    mock_minio_instance.read_json.return_value = sample_aemet_daily_bronze_data
+    mock_minio_instance.upload_parquet.return_value = 2048
+
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_daily_climatology(ds="2026-01-29", task_instance=None)
+
+    assert mock_minio_instance.client.list_objects.called
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_daily_climatology_no_data(MockMinIOClass):
+    """Test AEMET daily transformation with no data"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_daily_climatology(ds="2026-01-29", task_instance=None)
+
+    assert result == 0
+
+
+@pytest.mark.unit
+@patch("src.transformer.MinIOClient")
+def test_transform_aemet_historical_no_data(MockMinIOClass):
+    """Test AEMET historical transformation with no data"""
+    mock_minio_instance = Mock()
+    mock_minio_instance.client.list_objects.return_value = []
+    MockMinIOClass.return_value = mock_minio_instance
+
+    transformer = Transformer()
+    result = transformer.transform_aemet_historical(ds="2026-01-29", task_instance=None)
+
+    assert result == 0

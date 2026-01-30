@@ -17,13 +17,18 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
+from src.dimensional_loader import DimensionalLoader
 from src.weather_config.app_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_USER,
 )
-from src.weather_config.lake_config import SILVER_OPENWEATHER_BUCKET, SILVER_PATH_TEMPLATE
+from src.weather_config.lake_config import (
+    SILVER_AEMET_BUCKET,
+    SILVER_OPENWEATHER_BUCKET,
+    SILVER_PATH_TEMPLATE,
+)
 from src.weather_utils.minio_client import MinIOClient
 
 # Type aliases for common patterns
@@ -757,6 +762,394 @@ class Loader:
         except Exception as e:
             conn.rollback()
             self.log_error("Error loading data", e)
+            raise
+        finally:
+            conn.close()
+
+    # ========================================================================
+    # AEMET Load Methods
+    # ========================================================================
+
+    def get_station_id_mapping(self, conn: psycopg2.extensions.connection) -> Dict[str, int]:
+        """
+        Get AEMET station ID mappings from the database.
+
+        Args:
+            conn: Database connection
+
+        Returns:
+            Dictionary mapping station_id to database id
+        """
+        cur: psycopg2.extensions.cursor = conn.cursor()
+        cur.execute("SELECT station_id, id FROM dwh.dim_aemet_stations")
+        station_map: Dict[str, int] = {row[0]: row[1] for row in cur.fetchall()}
+        cur.close()
+        return station_map
+
+    def load_aemet_stations(self, **context: Any) -> int:
+        """
+        Load AEMET stations to dwh.dim_aemet_stations.
+
+        First tries to load from silver bucket. If no data found, falls back
+        to loading default stations using DimensionalLoader.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted/updated
+        """
+        self.log_start("Loading dim_aemet_stations")
+        conn = self.get_db_connection()
+
+        try:
+            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+            silver_path = f"stations/{execution_date}/"
+
+            try:
+                objects = self.minio_client.client.list_objects(
+                    SILVER_AEMET_BUCKET, prefix=silver_path
+                )
+                parquet_files = [
+                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                ]
+            except Exception:
+                parquet_files = []
+
+            if not parquet_files:
+                self.logger.warning(
+                    f"No AEMET stations files found for {execution_date}, "
+                    "loading default stations via DimensionalLoader"
+                )
+                conn.close()
+                # Fallback: load default stations using DimensionalLoader
+                dim_loader = DimensionalLoader()
+                dim_loader.load_dim_aemet_stations()
+                self.log_end("Loaded default AEMET stations via fallback")
+                return 15  # Default number of stations
+
+            latest_file = sorted(parquet_files)[-1]
+            df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
+
+            records = []
+            for _, row in df.iterrows():
+                records.append(
+                    (
+                        row.get("station_id"),
+                        row.get("station_name"),
+                        row.get("province"),
+                        self.clean_value(row.get("altitude")),
+                        self.clean_value(row.get("latitude")),
+                        self.clean_value(row.get("longitude")),
+                        row.get("synop_code"),
+                    )
+                )
+
+            if not records:
+                # No records in silver, load defaults
+                conn.close()
+                dim_loader = DimensionalLoader()
+                dim_loader.load_dim_aemet_stations()
+                self.log_end("Loaded default AEMET stations (empty silver file)")
+                return 15
+
+            insert_query = """
+                INSERT INTO dwh.dim_aemet_stations (
+                    station_id, station_name, province, altitude,
+                    latitude, longitude, synop_code
+                ) VALUES %s
+                ON CONFLICT (station_id) DO UPDATE SET
+                    station_name = EXCLUDED.station_name,
+                    province = EXCLUDED.province,
+                    altitude = EXCLUDED.altitude,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    synop_code = EXCLUDED.synop_code,
+                    updated_at = CURRENT_TIMESTAMP
+            """
+
+            cur = conn.cursor()
+            execute_values(cur, insert_query, records)
+            conn.commit()
+
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            self.log_end(f"Upserted {rowcount} AEMET stations from silver")
+            cur.close()
+            return rowcount
+
+        except Exception as e:
+            conn.rollback()
+            self.log_error("Error loading AEMET stations", e)
+            raise
+        finally:
+            if not conn.closed:
+                conn.close()
+
+    def load_fact_aemet_daily(self, **context: Any) -> int:
+        """
+        Load AEMET daily climatology to dwh.fct_aemet_daily_weather.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
+        self.log_start("Loading fct_aemet_daily_weather")
+        conn = self.get_db_connection()
+
+        try:
+            station_map = self.get_station_id_mapping(conn)
+            self.logger.info(f"Station map loaded: {len(station_map)} stations")
+
+            # If no stations in DB, try to load them first
+            if not station_map:
+                self.logger.warning(
+                    "No AEMET stations found in DB. Loading default stations first..."
+                )
+                conn.close()
+                dim_loader = DimensionalLoader()
+                dim_loader.load_dim_aemet_stations()
+                # Reopen connection and get the station map
+                conn = self.get_db_connection()
+                station_map = self.get_station_id_mapping(conn)
+                self.logger.info(f"After loading defaults: {len(station_map)} stations")
+
+            if station_map:
+                self.logger.info(f"Sample station IDs in DB: {list(station_map.keys())[:5]}")
+
+            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+            extraction_date_id = self.get_date_id(execution_date) or 0
+
+            # Try climatology/daily path first
+            silver_path = f"climatology/daily/{execution_date}/"
+            try:
+                objects = self.minio_client.client.list_objects(
+                    SILVER_AEMET_BUCKET, prefix=silver_path
+                )
+                parquet_files = [
+                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                ]
+            except Exception:
+                parquet_files = []
+
+            if not parquet_files:
+                self.logger.warning(f"No AEMET daily files found for {execution_date}")
+                return 0
+
+            latest_file = sorted(parquet_files)[-1]
+            self.logger.info(f"Reading parquet file: {latest_file}")
+            df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
+            self.logger.info(f"DataFrame loaded: {len(df)} rows, columns: {df.columns.tolist()}")
+
+            # Deduplicate
+            if "station_id" in df.columns and "date" in df.columns:
+                initial_count = len(df)
+                df.drop_duplicates(subset=["station_id", "date"], inplace=True)
+                if len(df) < initial_count:
+                    self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
+
+            # Log sample station IDs from parquet
+            if "station_id" in df.columns:
+                unique_stations = df["station_id"].unique().tolist()
+                self.logger.info(f"Station IDs in parquet: {unique_stations[:5]}")
+
+            records = []
+            skipped_stations = set()
+            for _, row in df.iterrows():
+                station_db_id = station_map.get(row.get("station_id"))
+                if not station_db_id:
+                    skipped_stations.add(row.get("station_id"))
+                    continue
+
+                date_id = self.get_date_id(row.get("date"))
+
+                records.append(
+                    (
+                        station_db_id,
+                        date_id,
+                        extraction_date_id,
+                        self.clean_value(row.get("temp_avg")),
+                        self.clean_value(row.get("temp_min")),
+                        self.clean_value(row.get("temp_max")),
+                        self.clean_value(row.get("precipitation")),
+                        self.clean_value(row.get("wind_speed_avg")),
+                        self.clean_value(row.get("wind_gust_max")),
+                        self.clean_value(row.get("wind_direction")),
+                        self.clean_value(row.get("sunshine_hours")),
+                        self.clean_value(row.get("pressure_max")),
+                        self.clean_value(row.get("pressure_min")),
+                        self.clean_value(row.get("humidity_avg")),
+                        self.clean_value(row.get("humidity_min")),
+                        self.clean_value(row.get("humidity_max")),
+                    )
+                )
+
+            if skipped_stations:
+                self.logger.warning(
+                    f"Skipped {len(skipped_stations)} unknown stations: {list(skipped_stations)[:5]}"
+                )
+
+            if not records:
+                self.logger.warning("No valid records to insert (all stations unknown)")
+                return 0
+
+            self.logger.info(f"Preparing to insert {len(records)} records")
+
+            # Add created_at timestamp
+            current_time = datetime.now()
+            records_with_time = [(*rec, current_time) for rec in records]
+
+            insert_query = """
+                INSERT INTO dwh.fct_aemet_daily_weather (
+                    station_id, date_id, extraction_date_id,
+                    temp_avg, temp_min, temp_max,
+                    precipitation, wind_speed_avg, wind_gust_max, wind_direction,
+                    sunshine_hours, pressure_max, pressure_min,
+                    humidity_avg, humidity_min, humidity_max,
+                    created_at
+                ) VALUES %s
+                ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
+            """
+
+            cur = conn.cursor()
+            execute_values(cur, insert_query, records_with_time)
+            conn.commit()
+
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            self.log_end(f"Inserted {rowcount} AEMET daily records")
+            cur.close()
+            return rowcount
+
+        except Exception as e:
+            conn.rollback()
+            self.log_error("Error loading AEMET daily", e)
+            raise
+        finally:
+            conn.close()
+
+    def load_fact_aemet_historical(self, **context: Any) -> int:
+        """
+        Load AEMET historical data to dwh.fct_aemet_daily_weather.
+
+        This method loads all historical data from the silver layer.
+
+        Args:
+            context: Airflow context containing execution date
+
+        Returns:
+            Number of records inserted
+        """
+        self.log_start("Loading AEMET Historical data")
+        conn = self.get_db_connection()
+
+        try:
+            station_map = self.get_station_id_mapping(conn)
+
+            # If no stations in DB, try to load them first
+            if not station_map:
+                self.logger.warning(
+                    "No AEMET stations found in DB. Loading default stations first..."
+                )
+                conn.close()
+                dim_loader = DimensionalLoader()
+                dim_loader.load_dim_aemet_stations()
+                conn = self.get_db_connection()
+                station_map = self.get_station_id_mapping(conn)
+                self.logger.info(f"After loading defaults: {len(station_map)} stations")
+
+            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+            extraction_date_id = self.get_date_id(execution_date) or 0
+
+            # Scan all historical files
+            silver_path = "historical/"
+            try:
+                objects = list(
+                    self.minio_client.client.list_objects(
+                        SILVER_AEMET_BUCKET, prefix=silver_path, recursive=True
+                    )
+                )
+                parquet_files = [
+                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                ]
+            except Exception:
+                parquet_files = []
+
+            if not parquet_files:
+                self.logger.warning("No AEMET historical files found")
+                return 0
+
+            total_inserted = 0
+
+            for parquet_file in parquet_files:
+                try:
+                    df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, parquet_file)
+
+                    # Deduplicate
+                    if "station_id" in df.columns and "date" in df.columns:
+                        df.drop_duplicates(subset=["station_id", "date"], inplace=True)
+
+                    records = []
+                    for _, row in df.iterrows():
+                        station_db_id = station_map.get(row.get("station_id"))
+                        if not station_db_id:
+                            continue
+
+                        date_id = self.get_date_id(row.get("date"))
+
+                        records.append(
+                            (
+                                station_db_id,
+                                date_id,
+                                extraction_date_id,
+                                self.clean_value(row.get("temp_avg")),
+                                self.clean_value(row.get("temp_min")),
+                                self.clean_value(row.get("temp_max")),
+                                self.clean_value(row.get("precipitation")),
+                                self.clean_value(row.get("wind_speed_avg")),
+                                self.clean_value(row.get("wind_gust_max")),
+                                self.clean_value(row.get("wind_direction")),
+                                self.clean_value(row.get("sunshine_hours")),
+                                self.clean_value(row.get("pressure_max")),
+                                self.clean_value(row.get("pressure_min")),
+                                self.clean_value(row.get("humidity_avg")),
+                                self.clean_value(row.get("humidity_min")),
+                                self.clean_value(row.get("humidity_max")),
+                            )
+                        )
+
+                    if records:
+                        current_time = datetime.now()
+                        records_with_time = [(*rec, current_time) for rec in records]
+
+                        insert_query = """
+                            INSERT INTO dwh.fct_aemet_daily_weather (
+                                station_id, date_id, extraction_date_id,
+                                temp_avg, temp_min, temp_max,
+                                precipitation, wind_speed_avg, wind_gust_max, wind_direction,
+                                sunshine_hours, pressure_max, pressure_min,
+                                humidity_avg, humidity_min, humidity_max,
+                                created_at
+                            ) VALUES %s
+                            ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
+                        """
+
+                        cur = conn.cursor()
+                        execute_values(cur, insert_query, records_with_time)
+                        conn.commit()
+                        total_inserted += cur.rowcount if cur.rowcount else 0
+                        cur.close()
+
+                except Exception as e:
+                    self.log_error(f"Error loading {parquet_file}", e)
+                    continue
+
+            self.log_end(f"Inserted {total_inserted} AEMET historical records")
+            return total_inserted
+
+        except Exception as e:
+            conn.rollback()
+            self.log_error("Error loading AEMET historical", e)
             raise
         finally:
             conn.close()
