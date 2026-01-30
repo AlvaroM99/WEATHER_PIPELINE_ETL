@@ -16,22 +16,14 @@ import pandas as pd
 import requests
 import urllib3
 
-from src.config.aemet_config import (
+from src.config.apis.aemet_config import (
     AEMET_BASE_URL,
+    DEFAULT_STATION_IDS,
 )
-from src.config.aemet_config import ENDPOINTS as AEMET_ENDPOINTS
-from src.config.aemet_config import REQUEST_TIMEOUT as AEMET_TIMEOUT
-from src.config.aemet_config import get_api_key as get_aemet_api_key
-
-# Import configuration and utils
-from src.config.app_config import API_KEY
-from src.config.lake_config import (
-    BRONZE_AEMET_BUCKET,
-    BRONZE_BUCKET,
-    BRONZE_OPENMETEO_BUCKET,
-    BRONZE_PATH_TEMPLATE,
-)
-from src.config.openmeteo_config import (
+from src.config.apis.aemet_config import ENDPOINTS as AEMET_ENDPOINTS
+from src.config.apis.aemet_config import REQUEST_TIMEOUT as AEMET_TIMEOUT
+from src.config.apis.aemet_config import get_api_key as get_aemet_api_key
+from src.config.apis.openmeteo_config import (
     AIR_QUALITY_PARAMS,
     DAILY_FORECAST_PARAMS,
     DEFAULT_TIMEZONE,
@@ -44,50 +36,41 @@ from src.config.openmeteo_config import (
     OPENMETEO_POLLEN_URL,
     POLLEN_PARAMS,
 )
+from src.config.apis.openweather_config import API_KEY
+
+# Import configuration and utils
+from src.config.lake_config import (
+    BRONZE_AEMET_BUCKET,
+    BRONZE_BUCKET,
+    BRONZE_OPENMETEO_BUCKET,
+    BRONZE_PATH_TEMPLATE,
+)
+from src.type_aliases import AirflowContext, CityDict, UploadedObject
 from src.utils.city_utils import get_capitals_dataframe, get_cities
+from src.utils.etl_logger import BaseETLLogger
 from src.utils.http_utils import get_retrying_session
 from src.utils.minio_client import MinIOClient
-
-# Type aliases for common patterns
-AirflowContext = Dict[str, Any]
-CityDict = Dict[str, Any]
-UploadedObject = Dict[str, Any]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-class Extractor:
+class Extractor(BaseETLLogger):
     """
     Unified Extractor Manager.
 
     Handles extraction for OpenWeatherMap and Open-Meteo services.
 
     Attributes:
-        logger: Logger instance for this class
+        logger: Logger instance for this class (via BaseETLLogger)
         minio_client: MinIO client for data lake operations
         session: HTTP session with retry logic
     """
 
     def __init__(self) -> None:
         """Initialize the Extractor with logger, MinIO client, and HTTP session."""
-        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
+        super().__init__()
         self.minio_client: MinIOClient = MinIOClient()
         self.session: requests.Session = get_retrying_session()
-
-    def log_start(self, msg: str) -> None:
-        """Log the start of an operation."""
-        self.logger.info(f"🚀 START: {msg}")
-
-    def log_end(self, msg: str) -> None:
-        """Log the end of an operation."""
-        self.logger.info(f"🏁 END: {msg}")
-
-    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
-        """Log an error message with optional exception details."""
-        if error:
-            self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
-        else:
-            self.logger.error(f"❌ ERROR: {msg}")
 
     # ========================================================================
     # OpenWeatherMap Extraction
@@ -638,16 +621,7 @@ class Extractor:
 
         # Default stations: Spanish capital cities stations
         if not station_ids:
-            station_ids = [
-                "3129",  # Madrid (Retiro)
-                "0076",  # Barcelona (Fabra)
-                "5530E",  # Sevilla (Aeropuerto)
-                "8416",  # Valencia (Aeropuerto)
-                "1024E",  # Bilbao (Aeropuerto)
-                "6155A",  # Malaga (Aeropuerto)
-                "1387",  # Zaragoza (Aeropuerto)
-                "8178D",  # Alicante (Aeropuerto)
-            ]
+            station_ids = DEFAULT_STATION_IDS.copy()
 
         # Format dates for AEMET API (ISO format with UTC)
         start_iso = f"{start_date}T00:00:00UTC"
@@ -741,16 +715,7 @@ class Extractor:
 
         # Default stations for Spanish capitals
         if not station_ids:
-            station_ids = [
-                "3129",  # Madrid (Retiro)
-                "0076",  # Barcelona (Fabra)
-                "5530E",  # Sevilla (Aeropuerto)
-                "8416",  # Valencia (Aeropuerto)
-                "1024E",  # Bilbao (Aeropuerto)
-                "6155A",  # Malaga (Aeropuerto)
-                "1387",  # Zaragoza (Aeropuerto)
-                "8178D",  # Alicante (Aeropuerto)
-            ]
+            station_ids = DEFAULT_STATION_IDS.copy()
 
         uploaded_objects: List[UploadedObject] = []
 

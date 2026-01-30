@@ -15,50 +15,31 @@ import pandas as pd
 import psycopg2
 import requests
 
-from src.config.app_config import (
+from src.config.apis.aemet_config import DEFAULT_STATIONS
+from src.config.database_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_USER,
 )
-
-# Type aliases
-AirflowContext = Dict[str, Any]
-
-# GitHub URL for raw_cities.csv
-CITIES_CSV_URL: str = (
-    "https://raw.githubusercontent.com/AlvaroM99/spanish_capital_cities/main/raw_cities.csv"
-)
+from src.type_aliases import AirflowContext
+from src.utils.city_utils import CITIES_CSV_URL
+from src.utils.etl_logger import BaseETLLogger
 
 
-class DimensionalLoader:
+class DimensionalLoader(BaseETLLogger):
     """
     Dimensional Loader Manager.
 
     Handles loading for dimensional tables (Time, City, etc.).
 
     Attributes:
-        logger: Logger instance for this class
+        logger: Logger instance for this class (via BaseETLLogger)
     """
 
     def __init__(self) -> None:
         """Initialize the DimensionalLoader with logger."""
-        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
-
-    def log_start(self, msg: str) -> None:
-        """Log the start of a loading operation."""
-        self.logger.info(f"🚀 START: {msg}")
-
-    def log_end(self, msg: str) -> None:
-        """Log the end of a loading operation."""
-        self.logger.info(f"🏁 END: {msg}")
-
-    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
-        """Log an error message with optional exception details."""
-        if error:
-            self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
-        else:
-            self.logger.error(f"❌ ERROR: {msg}")
+        super().__init__()
 
     def get_db_connection(self) -> psycopg2.extensions.connection:
         """
@@ -395,6 +376,7 @@ class DimensionalLoader:
 
         This creates initial station records for the most common Spanish cities.
         The full station list will be populated from the AEMET API extraction.
+        Uses DEFAULT_STATIONS from aemet_config.py for centralized configuration.
         """
         self.logger.info("Loading dim_aemet_stations with default stations...")
 
@@ -402,26 +384,16 @@ class DimensionalLoader:
         cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
-            # Insert default stations for major Spanish cities
-            cur.execute("""
+            # Build VALUES clause from DEFAULT_STATIONS
+            values_list = ", ".join(
+                f"('{s[0]}', '{s[1]}', '{s[2]}', {s[3]}, {s[4]}, {s[5]})"
+                for s in DEFAULT_STATIONS
+            )
+
+            cur.execute(f"""
                 INSERT INTO dwh.dim_aemet_stations (
                     station_id, station_name, province, altitude, latitude, longitude
-                ) VALUES
-                ('3129', 'MADRID, RETIRO', 'MADRID', 667.0, 40.4115, -3.6784),
-                ('0076', 'BARCELONA, FABRA', 'BARCELONA', 412.0, 41.4181, 2.1246),
-                ('5530E', 'SEVILLA, AEROPUERTO', 'SEVILLA', 34.0, 37.4167, -5.8833),
-                ('8416', 'VALENCIA, AEROPUERTO', 'VALENCIA', 69.0, 39.4833, -0.4833),
-                ('1024E', 'BILBAO, AEROPUERTO', 'VIZCAYA', 42.0, 43.3000, -2.9167),
-                ('6155A', 'MALAGA, AEROPUERTO', 'MALAGA', 5.0, 36.6667, -4.4833),
-                ('1387', 'ZARAGOZA, AEROPUERTO', 'ZARAGOZA', 247.0, 41.6617, -1.0042),
-                ('8178D', 'ALICANTE, AEROPUERTO', 'ALICANTE', 43.0, 38.2833, -0.5500),
-                ('1111X', 'SANTANDER, CMT', 'CANTABRIA', 64.0, 43.4917, -3.7992),
-                ('2539', 'VALLADOLID', 'VALLADOLID', 735.0, 41.6528, -4.7617),
-                ('C447A', 'PALMA DE MALLORCA', 'ILLES BALEARS', 8.0, 39.5592, 2.7386),
-                ('9434', 'MURCIA, ALCANTARILLA', 'MURCIA', 75.0, 37.9589, -1.2306),
-                ('6001', 'GRANADA, AEROPUERTO', 'GRANADA', 567.0, 37.1867, -3.7772),
-                ('9091O', 'CORDOBA, AEROPUERTO', 'CORDOBA', 90.0, 37.8417, -4.8500),
-                ('9170', 'TOLEDO', 'TOLEDO', 515.0, 39.8817, -4.0489)
+                ) VALUES {values_list}
                 ON CONFLICT (station_id) DO UPDATE SET
                     station_name = EXCLUDED.station_name,
                     province = EXCLUDED.province,
@@ -432,7 +404,9 @@ class DimensionalLoader:
             """)
 
             conn.commit()
-            self.logger.info("Loaded 15 default AEMET stations into dim_aemet_stations")
+            self.logger.info(
+                f"Loaded {len(DEFAULT_STATIONS)} default AEMET stations into dim_aemet_stations"
+            )
 
         except Exception as e:
             conn.rollback()

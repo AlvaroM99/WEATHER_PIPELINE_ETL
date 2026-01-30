@@ -45,6 +45,19 @@ def get_minio_connection() -> dict:
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER", "")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "")
+MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+
+
+def get_minio_config() -> dict:
+    """
+    Get MinIO configuration dictionary.
+
+    Returns dict with: endpoint, access_key, secret_key, secure
+    Uses SecretsManager for credential retrieval.
+
+    Note: Alias for get_minio_connection() for backward compatibility.
+    """
+    return get_minio_connection()
 
 # ============================================================================
 # BRONZE LAYER - Raw data from each API source

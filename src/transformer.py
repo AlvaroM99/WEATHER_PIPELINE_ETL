@@ -22,44 +22,26 @@ from src.config.lake_config import (
     SILVER_OPENMETEO_BUCKET,
     SILVER_PATH_TEMPLATE,
 )
+from src.type_aliases import AirflowContext, BronzeObject, TransformedRecord
+from src.utils.etl_logger import BaseETLLogger
 from src.utils.minio_client import MinIOClient
 
-# Type aliases for common patterns
-AirflowContext = Dict[str, Any]
-BronzeObject = Dict[str, Any]
-TransformedRecord = Dict[str, Any]
 
-
-class Transformer:
+class Transformer(BaseETLLogger):
     """
     Unified Transformer Manager.
 
     Handles transformation for OpenWeatherMap and Open-Meteo services.
 
     Attributes:
-        logger: Logger instance for this class
+        logger: Logger instance for this class (via BaseETLLogger)
         minio_client: MinIO client for data lake operations
     """
 
     def __init__(self) -> None:
         """Initialize the Transformer with logger and MinIO client."""
-        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
+        super().__init__()
         self.minio_client: MinIOClient = MinIOClient()
-
-    def log_start(self, msg: str) -> None:
-        """Log the start of a transformation operation."""
-        self.logger.info(f"🚀 START: {msg}")
-
-    def log_end(self, msg: str) -> None:
-        """Log the end of a transformation operation."""
-        self.logger.info(f"🏁 END: {msg}")
-
-    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
-        """Log an error message with optional exception details."""
-        if error:
-            self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
-        else:
-            self.logger.error(f"❌ ERROR: {msg}")
 
     # ========================================================================
     # OpenWeatherMap Transformation

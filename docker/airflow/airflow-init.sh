@@ -13,6 +13,9 @@ if [ -f /opt/airflow/requirements.txt ]; then
     pip install --no-cache-dir -r /opt/airflow/requirements.txt
 fi
 
+echo "Removing problematic openlineage provider (causes ThreadPoolExecutor import error)..."
+pip uninstall -y apache-airflow-providers-openlineage 2>/dev/null || true
+
 echo "Initializing Airflow database..."
 airflow db init
 
@@ -27,11 +30,11 @@ airflow users create \
 
 echo "Initializing Airflow Connections for secure credential management..."
 if [ -f /opt/airflow/init-connections.sh ]; then
-    chmod +x /opt/airflow/init-connections.sh
-    /opt/airflow/init-connections.sh
+    bash /opt/airflow/init-connections.sh || echo "Warning: init-connections.sh failed, continuing..."
 else
     echo "Warning: init-connections.sh not found, skipping connection setup"
 fi
 
 echo "Starting Airflow webserver and scheduler..."
-airflow webserver & airflow scheduler
+airflow webserver &
+exec airflow scheduler

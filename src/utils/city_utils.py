@@ -17,8 +17,7 @@ import requests
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Type aliases
-CityDict = Dict[str, Any]
+from src.type_aliases import CityDict
 
 # GitHub URL for raw_cities.csv
 CITIES_CSV_URL: str = (

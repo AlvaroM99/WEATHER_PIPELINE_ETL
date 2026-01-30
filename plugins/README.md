@@ -26,7 +26,7 @@ This allows Airflow DAGs to import modules using:
 
 ```python
 from src.extractor import Extractor
-from src.config.app_config import POSTGRES_HOST
+from src.config.database_config import POSTGRES_HOST
 from src.utils.minio_client import MinIOClient
 ```
 

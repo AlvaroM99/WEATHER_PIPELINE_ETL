@@ -16,7 +16,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 from src.dimensional_loader import DimensionalLoader
-from src.config.app_config import (
+from src.config.database_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,

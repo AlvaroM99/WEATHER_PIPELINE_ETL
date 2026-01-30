@@ -18,7 +18,7 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 from src.dimensional_loader import DimensionalLoader
-from src.config.app_config import (
+from src.config.database_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
@@ -29,13 +29,9 @@ from src.config.lake_config import (
     SILVER_OPENWEATHER_BUCKET,
     SILVER_PATH_TEMPLATE,
 )
+from src.type_aliases import AirflowContext, CityIdMapping, MapperFunction, RecordTuple
+from src.utils.etl_logger import BaseETLLogger
 from src.utils.minio_client import MinIOClient
-
-# Type aliases for common patterns
-AirflowContext = Dict[str, Any]
-CityIdMapping = Dict[str, int]
-RecordTuple = Tuple[Any, ...]
-MapperFunction = Callable[[pd.Series, int, int], RecordTuple]
 
 # Data quality imports (optional - graceful degradation if not installed)
 DATA_QUALITY_AVAILABLE = False
@@ -64,14 +60,14 @@ except ImportError as e:
     )
 
 
-class Loader:
+class Loader(BaseETLLogger):
     """
     Unified Loader Manager.
 
     Handles loading for all fact tables with integrated data quality validation.
 
     Attributes:
-        logger: Logger instance for this class
+        logger: Logger instance for this class (via BaseETLLogger)
         minio_client: MinIO client for data lake operations
         enable_validation: Whether data validation is enabled
         strict_validation: Whether to raise exceptions on validation failure
@@ -95,7 +91,7 @@ class Loader:
                               If False, logs warnings but continues loading
             collect_metrics: If True, collects quality metrics for reporting
         """
-        self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
+        super().__init__()
         self.minio_client: MinIOClient = MinIOClient()
 
         # Data quality configuration (only if module is available)
@@ -113,21 +109,6 @@ class Loader:
             DataQualityMetrics() if self.collect_metrics and DATA_QUALITY_AVAILABLE else None
         )
         self._last_validation_results: Dict[str, Any] = {}
-
-    def log_start(self, msg: str) -> None:
-        """Log the start of a loading operation."""
-        self.logger.info(f"🚀 START: {msg}")
-
-    def log_end(self, msg: str) -> None:
-        """Log the end of a loading operation."""
-        self.logger.info(f"🏁 END: {msg}")
-
-    def log_error(self, msg: str, error: Optional[Exception] = None) -> None:
-        """Log an error message with optional exception details."""
-        if error:
-            self.logger.error(f"❌ ERROR: {msg} - {str(error)}")
-        else:
-            self.logger.error(f"❌ ERROR: {msg}")
 
     # ========================================================================
     # Data Quality Validation Methods
