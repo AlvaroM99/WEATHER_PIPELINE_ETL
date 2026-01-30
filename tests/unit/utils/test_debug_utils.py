@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pandas as pd
 import pytest
 
-from src.weather_utils.debug_utils import (
+from src.utils.debug_utils import (
     check_minio_connectivity,
     check_postgres_connectivity,
     compare_dataframes,
@@ -286,7 +286,7 @@ def test_trace_exception_traceback_content():
 @pytest.mark.unit
 def test_check_minio_connectivity_success():
     """Test successful MinIO connectivity check"""
-    import src.weather_utils.debug_utils as debug_module
+    import src.utils.debug_utils as debug_module
 
     # Save original Minio
     original_minio = debug_module.Minio
@@ -318,7 +318,7 @@ def test_check_minio_connectivity_success():
 @pytest.mark.unit
 def test_check_minio_connectivity_failure():
     """Test MinIO connectivity failure handling"""
-    import src.weather_utils.debug_utils as debug_module
+    import src.utils.debug_utils as debug_module
 
     original_minio = debug_module.Minio
 
@@ -343,7 +343,7 @@ def test_check_minio_connectivity_failure():
 @pytest.mark.unit
 def test_check_postgres_connectivity_success():
     """Test successful PostgreSQL connectivity check"""
-    import src.weather_utils.debug_utils as debug_module
+    import src.utils.debug_utils as debug_module
 
     original_psycopg2 = debug_module.psycopg2
 
@@ -373,7 +373,7 @@ def test_check_postgres_connectivity_success():
 @pytest.mark.unit
 def test_check_postgres_connectivity_failure():
     """Test PostgreSQL connectivity failure handling"""
-    import src.weather_utils.debug_utils as debug_module
+    import src.utils.debug_utils as debug_module
 
     original_psycopg2 = debug_module.psycopg2
 
@@ -399,8 +399,8 @@ def test_check_postgres_connectivity_failure():
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.debug_utils.check_minio_connectivity")
-@patch("src.weather_utils.debug_utils.check_postgres_connectivity")
+@patch("src.utils.debug_utils.check_minio_connectivity")
+@patch("src.utils.debug_utils.check_postgres_connectivity")
 def test_generate_diagnostic_report(mock_postgres, mock_minio):
     """Test diagnostic report generation"""
     mock_minio.return_value = {"connected": True}
@@ -415,8 +415,8 @@ def test_generate_diagnostic_report(mock_postgres, mock_minio):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.debug_utils.check_minio_connectivity")
-@patch("src.weather_utils.debug_utils.check_postgres_connectivity")
+@patch("src.utils.debug_utils.check_minio_connectivity")
+@patch("src.utils.debug_utils.check_postgres_connectivity")
 def test_generate_diagnostic_report_skip_checks(mock_postgres, mock_minio):
     """Test diagnostic report without connectivity checks"""
     result = generate_diagnostic_report(include_minio=False, include_postgres=False)
@@ -433,8 +433,8 @@ def test_generate_diagnostic_report_env_vars(monkeypatch):
     monkeypatch.setenv("OPENWEATHER_API_KEY", "test_key")
 
     with (
-        patch("src.weather_utils.debug_utils.check_minio_connectivity"),
-        patch("src.weather_utils.debug_utils.check_postgres_connectivity"),
+        patch("src.utils.debug_utils.check_minio_connectivity"),
+        patch("src.utils.debug_utils.check_postgres_connectivity"),
     ):
         result = generate_diagnostic_report()
 

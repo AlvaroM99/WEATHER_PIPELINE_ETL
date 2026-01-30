@@ -1,3 +1,6 @@
+# Production Dependencies
+# Install with: pip install -r requirements/base.txt
+
 requests
 psycopg2-binary
 pandas

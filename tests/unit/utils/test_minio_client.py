@@ -11,11 +11,11 @@ import pandas as pd
 import pytest
 from minio.error import S3Error
 
-from src.weather_utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_minio_client_initialization(mock_minio_class):
     """Test MinIO client initialization and bucket creation"""
     # Setup mock
@@ -48,7 +48,7 @@ def test_minio_client_initialization(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_minio_client_buckets_already_exist(mock_minio_class):
     """Test initialization when buckets already exist"""
     # Setup mock - buckets exist
@@ -64,7 +64,7 @@ def test_minio_client_buckets_already_exist(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_upload_json_success(mock_minio_class):
     """Test successful JSON upload to MinIO"""
     # Setup mock
@@ -98,7 +98,7 @@ def test_upload_json_success(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_upload_json_s3_error(mock_minio_class):
     """Test JSON upload handling S3 errors"""
     # Setup mock to raise S3Error
@@ -116,7 +116,7 @@ def test_upload_json_s3_error(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_read_json_success(mock_minio_class):
     """Test successful JSON read from MinIO"""
     # Setup mock
@@ -141,7 +141,7 @@ def test_read_json_success(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_upload_parquet_success(mock_minio_class):
     """Test successful Parquet upload to MinIO"""
     # Setup mock
@@ -180,7 +180,7 @@ def test_upload_parquet_success(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_read_parquet_success(mock_minio_class):
     """Test successful Parquet read from MinIO"""
     # Setup mock
@@ -213,7 +213,7 @@ def test_read_parquet_success(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_list_objects_success(mock_minio_class):
     """Test successful listing of objects in bucket"""
     # Setup mock
@@ -239,7 +239,7 @@ def test_list_objects_success(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_list_objects_empty_bucket(mock_minio_class):
     """Test listing objects in empty bucket"""
     # Setup mock
@@ -257,7 +257,7 @@ def test_list_objects_empty_bucket(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_json_roundtrip(mock_minio_class):
     """Test JSON upload and download roundtrip"""
     # Setup mock
@@ -296,7 +296,7 @@ def test_json_roundtrip(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_parquet_dataframe_preservation(mock_minio_class):
     """Test that DataFrame dtypes and structure are preserved in Parquet roundtrip"""
     # Setup mock
@@ -340,7 +340,7 @@ def test_parquet_dataframe_preservation(mock_minio_class):
 
 
 @pytest.mark.unit
-@patch("src.weather_utils.minio_client.Minio")
+@patch("src.utils.minio_client.Minio")
 def test_bucket_creation_error_handling(mock_minio_class):
     """Test error handling during bucket creation"""
     # Setup mock to raise S3Error on make_bucket

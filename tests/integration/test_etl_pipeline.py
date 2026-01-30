@@ -409,7 +409,7 @@ def test_transformation_handles_corrupted_file(MockMinIOClass):
 @pytest.mark.integration
 def test_bucket_configuration():
     """Test that bucket configuration is correctly set"""
-    from src.weather_config.lake_config import (
+    from src.config.lake_config import (
         BRONZE_BUCKET,
         BRONZE_OPENMETEO_BUCKET,
         SILVER_BUCKET,
@@ -429,7 +429,7 @@ def test_bucket_configuration():
 @pytest.mark.integration
 def test_api_configuration():
     """Test that API configuration is correctly set"""
-    from src.weather_config.openmeteo_config import (
+    from src.config.apis.openmeteo_config import (
         DAILY_FORECAST_PARAMS,
         HOURLY_FORECAST_PARAMS,
         OPENMETEO_AIR_QUALITY_URL,

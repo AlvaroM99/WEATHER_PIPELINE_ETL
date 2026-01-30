@@ -40,4 +40,14 @@ standalone_admin_password.txt
 venv/
 env/
 ENV/
-.coverage
+
+# Test coverage
+tests/.coverage
+tests/htmlcov/
+
+# Test and type checking caches
+.pytest_cache/
+.mypy_cache/
+
+# Windows artifacts
+nul

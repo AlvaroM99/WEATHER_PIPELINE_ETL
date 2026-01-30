@@ -20,12 +20,13 @@ from minio.error import S3Error
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.weather_config.lake_config import BRONZE_BUCKET, SILVER_BUCKET
-from src.weather_config.storage_config import (
+from src.config.lake_config import (
+    BRONZE_BUCKET,
     MINIO_ACCESS_KEY,
     MINIO_ENDPOINT,
     MINIO_SECRET_KEY,
     MINIO_SECURE,
+    SILVER_BUCKET,
 )
 
 logger: logging.Logger = logging.getLogger(__name__)

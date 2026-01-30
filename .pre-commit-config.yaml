@@ -1,5 +1,5 @@
 # Pre-commit hooks for Weather Pipeline ETL
-# Install: pip install pre-commit && pre-commit install
+# Install: pip install -r requirements/dev.txt && pre-commit install
 # Run manually: pre-commit run --all-files
 
 default_language_version:
@@ -11,9 +11,9 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(htmlcov/|\.pytest_cache/)
+        exclude: ^(tests/htmlcov/|\.pytest_cache/)
       - id: end-of-file-fixer
-        exclude: ^(htmlcov/|\.pytest_cache/)
+        exclude: ^(tests/htmlcov/|\.pytest_cache/)
       - id: check-yaml
         args: [--unsafe]  # Allow custom tags in YAML
       - id: check-json
@@ -41,15 +41,12 @@ repos:
       - id: isort
         args: ['--settings-path', 'pyproject.toml']
 
-  # Linting with flake8
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+  # Linting with ruff (faster alternative to flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.14
     hooks:
-      - id: flake8
-        additional_dependencies:
-          - flake8-bugbear
-          - flake8-comprehensions
-        args: ['--config', '.flake8']
+      - id: ruff
+        args: ['--config', 'pyproject.toml']
 
   # Type checking (optional, runs on changed files only)
   - repo: https://github.com/pre-commit/mirrors-mypy

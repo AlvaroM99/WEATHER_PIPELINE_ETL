@@ -15,13 +15,13 @@ import psycopg2
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.dimensional_loader import DimensionalLoader
-from src.weather_config.app_config import (
+from src.config.database_config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_USER,
 )
+from src.dimensional_loader import DimensionalLoader
 
 logger = logging.getLogger(__name__)
 
