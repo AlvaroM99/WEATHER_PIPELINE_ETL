@@ -59,6 +59,7 @@ def get_minio_config() -> dict:
     """
     return get_minio_connection()
 
+
 # ============================================================================
 # BRONZE LAYER - Raw data from each API source
 # ============================================================================

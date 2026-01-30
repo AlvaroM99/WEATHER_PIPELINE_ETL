@@ -56,13 +56,13 @@ RETRY_BACKOFF_FACTOR = 0.5
 
 # Station IDs for extraction (subset used in daily extractions)
 DEFAULT_STATION_IDS = [
-    "3129",   # Madrid (Retiro)
-    "0076",   # Barcelona (Fabra)
+    "3129",  # Madrid (Retiro)
+    "0076",  # Barcelona (Fabra)
     "5530E",  # Sevilla (Aeropuerto)
-    "8416",   # Valencia (Aeropuerto)
+    "8416",  # Valencia (Aeropuerto)
     "1024E",  # Bilbao (Aeropuerto)
     "6155A",  # Malaga (Aeropuerto)
-    "1387",   # Zaragoza (Aeropuerto)
+    "1387",  # Zaragoza (Aeropuerto)
     "8178D",  # Alicante (Aeropuerto)
 ]
 
