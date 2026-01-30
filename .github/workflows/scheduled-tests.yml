@@ -57,8 +57,8 @@ jobs:
       - name: Install all dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          pip install -r requirements/base.txt
+          pip install -r requirements/test.txt
 
       - name: Run full test suite
         run: |
@@ -117,7 +117,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements/base.txt
           pip install pip-audit safety
 
       - name: Check for security vulnerabilities
@@ -145,8 +145,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          pip install -r requirements/base.txt
+          pip install -r requirements/test.txt
 
       - name: Run comprehensive data quality checks
         run: |
