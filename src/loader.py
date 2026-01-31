@@ -31,7 +31,7 @@ from src.config.lake_config import (
 from src.dimensional_loader import DimensionalLoader
 from src.type_aliases import AirflowContext, CityIdMapping, MapperFunction, RecordTuple
 from src.utils.etl_logger import BaseETLLogger
-from src.utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient, get_minio_client
 
 # Data quality imports (optional - graceful degradation if not installed)
 DATA_QUALITY_AVAILABLE = False
@@ -92,7 +92,7 @@ class Loader(BaseETLLogger):
             collect_metrics: If True, collects quality metrics for reporting
         """
         super().__init__()
-        self.minio_client: MinIOClient = MinIOClient()
+        self.minio_client: MinIOClient = get_minio_client()
 
         # Data quality configuration (only if module is available)
         self.enable_validation: bool = enable_validation and DATA_QUALITY_AVAILABLE

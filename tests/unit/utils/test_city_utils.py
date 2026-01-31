@@ -10,10 +10,12 @@ import pytest
 import responses
 
 from src.utils.city_utils import (
+    clear_cities_cache,
     get_capitals_dataframe,
     get_cities,
     get_coastal_cities,
     load_cities_from_github,
+    set_cities_cache,
 )
 
 GITHUB_CSV_URL = (
@@ -30,9 +32,7 @@ def test_load_cities_from_github_success(sample_github_csv):
     responses.add(responses.GET, GITHUB_CSV_URL, body=sample_github_csv, status=200)
 
     # Clear cache first
-    import src.utils.city_utils as city_utils
-
-    city_utils._cities_cache = None
+    clear_cities_cache()
 
     # Execute
     df = load_cities_from_github()
@@ -57,9 +57,7 @@ def test_load_cities_from_github_network_error():
     responses.add(responses.GET, GITHUB_CSV_URL, body="Connection error", status=500)
 
     # Clear cache
-    import src.utils.city_utils as city_utils
-
-    city_utils._cities_cache = None
+    clear_cities_cache()
 
     # Execute and expect exception
     with pytest.raises(Exception):
@@ -69,8 +67,6 @@ def test_load_cities_from_github_network_error():
 @pytest.mark.unit
 def test_caching_mechanism():
     """Test that cities are cached and not downloaded twice"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache with sample data
     sample_df = pd.DataFrame(
         [
@@ -84,7 +80,7 @@ def test_caching_mechanism():
             }
         ]
     )
-    city_utils._cities_cache = sample_df
+    set_cities_cache(sample_df)
 
     # Call function - should return cached data without HTTP call
     result = load_cities_from_github()
@@ -94,17 +90,15 @@ def test_caching_mechanism():
     assert len(result) == 1
     assert result["city_name"].iloc[0] == "Madrid"
     # Verify it's a copy, not the same object
-    assert result is not city_utils._cities_cache
+    assert result is not sample_df
 
 
 @pytest.mark.unit
 def test_get_cities_format(sample_github_csv):
     """Test get_cities() returns correct format for OpenWeather API"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache with sample data
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
-    city_utils._cities_cache = df
+    set_cities_cache(df)
 
     # Execute
     cities = get_cities()
@@ -134,11 +128,9 @@ def test_get_cities_format(sample_github_csv):
 @pytest.mark.unit
 def test_get_capitals_dataframe_format(sample_github_csv):
     """Test get_capitals_dataframe() returns correct format for Open-Meteo API"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
-    city_utils._cities_cache = df
+    set_cities_cache(df)
 
     # Execute
     capitals_df = get_capitals_dataframe()
@@ -170,11 +162,9 @@ def test_get_capitals_dataframe_format(sample_github_csv):
 @pytest.mark.unit
 def test_get_coastal_cities(sample_github_csv):
     """Test get_coastal_cities() filters only coastal cities"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
-    city_utils._cities_cache = df
+    set_cities_cache(df)
 
     # Execute
     coastal_cities = get_coastal_cities()
@@ -205,10 +195,8 @@ def test_get_coastal_cities(sample_github_csv):
 @pytest.mark.unit
 def test_empty_dataframe_handling():
     """Test handling of empty DataFrame"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache with empty DataFrame
-    city_utils._cities_cache = pd.DataFrame()
+    set_cities_cache(pd.DataFrame())
 
     # Execute
     cities = get_cities()
@@ -231,9 +219,7 @@ def test_required_columns_validation(sample_github_csv):
     responses.add(responses.GET, GITHUB_CSV_URL, body=invalid_csv, status=200)
 
     # Clear cache
-    import src.utils.city_utils as city_utils
-
-    city_utils._cities_cache = None
+    clear_cities_cache()
 
     # Execute - should raise ValueError for missing columns
     with pytest.raises(ValueError, match="CSV missing required columns"):
@@ -243,11 +229,9 @@ def test_required_columns_validation(sample_github_csv):
 @pytest.mark.unit
 def test_coordinates_are_numeric(sample_github_csv):
     """Test that latitude and longitude are properly converted to numeric"""
-    import src.utils.city_utils as city_utils
-
     # Setup cache
     df = pd.read_csv(pd.io.common.StringIO(sample_github_csv))
-    city_utils._cities_cache = df
+    set_cities_cache(df)
 
     # Execute
     cities = get_cities()

@@ -24,7 +24,7 @@ from src.config.lake_config import (
 )
 from src.type_aliases import AirflowContext, BronzeObject, TransformedRecord
 from src.utils.etl_logger import BaseETLLogger
-from src.utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient, get_minio_client
 
 
 class Transformer(BaseETLLogger):
@@ -41,7 +41,7 @@ class Transformer(BaseETLLogger):
     def __init__(self) -> None:
         """Initialize the Transformer with logger and MinIO client."""
         super().__init__()
-        self.minio_client: MinIOClient = MinIOClient()
+        self.minio_client: MinIOClient = get_minio_client()
 
     # ========================================================================
     # OpenWeatherMap Transformation

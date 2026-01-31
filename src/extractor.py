@@ -49,7 +49,7 @@ from src.type_aliases import AirflowContext, CityDict, UploadedObject
 from src.utils.city_utils import get_capitals_dataframe, get_cities
 from src.utils.etl_logger import BaseETLLogger
 from src.utils.http_utils import get_retrying_session
-from src.utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient, get_minio_client
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -69,7 +69,7 @@ class Extractor(BaseETLLogger):
     def __init__(self) -> None:
         """Initialize the Extractor with logger, MinIO client, and HTTP session."""
         super().__init__()
-        self.minio_client: MinIOClient = MinIOClient()
+        self.minio_client: MinIOClient = get_minio_client()
         self.session: requests.Session = get_retrying_session()
 
     # ========================================================================

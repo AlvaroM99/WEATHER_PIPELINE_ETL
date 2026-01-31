@@ -11,7 +11,15 @@ import pandas as pd
 import pytest
 from minio.error import S3Error
 
-from src.utils.minio_client import MinIOClient
+from src.utils.minio_client import MinIOClient, reset_minio_client
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_singleton():
+    """Reset MinIO singleton before and after each test."""
+    reset_minio_client()
+    yield
+    reset_minio_client()
 
 
 @pytest.mark.unit
