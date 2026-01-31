@@ -142,9 +142,9 @@ def get_cities() -> List[CityDict]:
         return []
 
     # Vectorized conversion to list of dicts
-    return df.rename(
-        columns={"city_name": "name", "latitud": "lat", "longitud": "lon"}
-    )[["name", "lat", "lon"]].to_dict("records")
+    return df.rename(columns={"city_name": "name", "latitud": "lat", "longitud": "lon"})[
+        ["name", "lat", "lon"]
+    ].to_dict("records")
 
 
 def get_coastal_cities() -> List[CityDict]:
