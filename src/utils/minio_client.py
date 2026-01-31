@@ -2,6 +2,7 @@
 MinIO Client Utilities
 
 Type-annotated module for handling connection and operations with MinIO data lake.
+Implements singleton pattern for efficient resource usage.
 """
 
 from __future__ import annotations
@@ -9,16 +10,12 @@ from __future__ import annotations
 import io
 import json
 import logging
-import os
-import sys
-from typing import Any, Dict, List
+import threading
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from minio import Minio
 from minio.error import S3Error
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config.lake_config import (
     BRONZE_BUCKET,
@@ -31,10 +28,56 @@ from src.config.lake_config import (
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# Singleton instance and lock
+_client_instance: Optional["MinIOClient"] = None
+_client_lock: threading.Lock = threading.Lock()
+
+
+def get_minio_client() -> "MinIOClient":
+    """
+    Get the singleton MinIOClient instance.
+
+    Thread-safe with lazy initialization. The client is created on first
+    call and reused for subsequent calls within the same process.
+
+    Returns:
+        Singleton MinIOClient instance
+
+    Example:
+        client = get_minio_client()
+        client.upload_json(bucket, path, data)
+    """
+    global _client_instance
+
+    # Fast path without lock
+    if _client_instance is not None:
+        return _client_instance
+
+    with _client_lock:
+        # Double-check after acquiring lock
+        if _client_instance is None:
+            _client_instance = MinIOClient()
+        return _client_instance
+
+
+def reset_minio_client() -> None:
+    """
+    Reset the singleton instance. Thread-safe.
+
+    Primarily used in tests to ensure fresh client state.
+    Also useful if connection parameters change at runtime.
+    """
+    global _client_instance
+    with _client_lock:
+        _client_instance = None
+
 
 class MinIOClient:
     """
     Client for interacting with MinIO data lake.
+
+    NOTE: Prefer using get_minio_client() to get a singleton instance
+    rather than instantiating this class directly.
 
     Attributes:
         client: Minio client instance

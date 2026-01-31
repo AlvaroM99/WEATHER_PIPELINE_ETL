@@ -10,24 +10,35 @@ import pandas as pd
 import pytest
 import responses
 
+from src.utils.minio_client import reset_minio_client
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_singleton():
+    """Reset MinIO singleton before and after each test."""
+    reset_minio_client()
+    yield
+    reset_minio_client()
+
+
 # ===== ETL Pipeline Flow Tests =====
 
 
 @pytest.mark.integration
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
-@patch("src.transformer.MinIOClient")
-@patch("src.loader.MinIOClient")
+@patch("src.transformer.get_minio_client")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 @patch("src.loader.execute_values")
 def test_openweather_etl_pipeline(
     mock_execute_values,
     mock_connect,
-    MockLoaderMinIO,
-    MockTransformerMinIO,
+    mock_loader_get_minio_client,
+    mock_transformer_get_minio_client,
     mock_get_cities,
-    MockExtractorMinIO,
+    mock_extractor_get_minio_client,
     sample_openweather_response,
     sample_cities,
     mock_db_connection,
@@ -36,7 +47,7 @@ def test_openweather_etl_pipeline(
     # Setup Extractor
     mock_extractor_minio = Mock()
     mock_extractor_minio.upload_json.return_value = 1024
-    MockExtractorMinIO.return_value = mock_extractor_minio
+    mock_extractor_get_minio_client.return_value = mock_extractor_minio
 
     responses.add(
         responses.GET,
@@ -71,7 +82,7 @@ def test_openweather_etl_pipeline(
     bronze_objects = [{"object_path": "current/2026-01-29/madrid.json"}]
     mock_transformer_minio.read_json.return_value = sample_openweather_response
     mock_transformer_minio.upload_parquet.return_value = 2048
-    MockTransformerMinIO.return_value = mock_transformer_minio
+    mock_transformer_get_minio_client.return_value = mock_transformer_minio
 
     # Execute Transformation
     from src.transformer import Transformer
@@ -91,7 +102,7 @@ def test_openweather_etl_pipeline(
     # Setup Loader
     mock_loader_minio = Mock()
     mock_loader_minio.read_parquet.return_value = transformed_df
-    MockLoaderMinIO.return_value = mock_loader_minio
+    mock_loader_get_minio_client.return_value = mock_loader_minio
 
     mock_cursor = Mock()
     mock_cursor.rowcount = len(transformed_df)
@@ -113,13 +124,13 @@ def test_openweather_etl_pipeline(
 
 @pytest.mark.integration
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_openmeteo_daily_extract_transform(
-    MockTransformerMinIO,
+    mock_transformer_get_minio_client,
     mock_get_capitals,
-    MockExtractorMinIO,
+    mock_extractor_get_minio_client,
     sample_openmeteo_daily_response,
     sample_capitals_df,
 ):
@@ -127,7 +138,7 @@ def test_openmeteo_daily_extract_transform(
     # Setup Extractor
     mock_extractor_minio = Mock()
     mock_extractor_minio.upload_json.return_value = 1024
-    MockExtractorMinIO.return_value = mock_extractor_minio
+    mock_extractor_get_minio_client.return_value = mock_extractor_minio
 
     responses.add(
         responses.GET,
@@ -163,7 +174,7 @@ def test_openmeteo_daily_extract_transform(
     mock_transformer_minio = Mock()
     mock_transformer_minio.read_json.return_value = sample_openmeteo_daily_response
     mock_transformer_minio.upload_parquet.return_value = 2048
-    MockTransformerMinIO.return_value = mock_transformer_minio
+    mock_transformer_get_minio_client.return_value = mock_transformer_minio
 
     # Execute Transformation
     from src.transformer import Transformer
@@ -187,11 +198,11 @@ def test_openmeteo_daily_extract_transform(
 
 @pytest.mark.integration
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_multiple_extraction_types_parallel(
     mock_get_capitals,
-    MockExtractorMinIO,
+    mock_extractor_get_minio_client,
     sample_openmeteo_daily_response,
     sample_openmeteo_hourly_response,
     sample_capitals_df,
@@ -199,7 +210,7 @@ def test_multiple_extraction_types_parallel(
     """Test multiple extraction types can run (simulated parallel)"""
     mock_extractor_minio = Mock()
     mock_extractor_minio.upload_json.return_value = 1024
-    MockExtractorMinIO.return_value = mock_extractor_minio
+    mock_extractor_get_minio_client.return_value = mock_extractor_minio
 
     # Setup responses for multiple APIs
     responses.add(
@@ -240,9 +251,9 @@ def test_multiple_extraction_types_parallel(
 
 
 @pytest.mark.integration
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transformation_preserves_data_integrity(
-    MockTransformerMinIO, sample_openmeteo_daily_response
+    mock_transformer_get_minio_client, sample_openmeteo_daily_response
 ):
     """Test that transformation preserves data integrity"""
     mock_minio = Mock()
@@ -254,7 +265,7 @@ def test_transformation_preserves_data_integrity(
     bronze_objects = [{"object_path": "forecast/daily/2026-01-29/madrid.json"}]
     mock_minio.read_json.return_value = sample_openmeteo_daily_response
     mock_minio.upload_parquet.return_value = 2048
-    MockTransformerMinIO.return_value = mock_minio
+    mock_transformer_get_minio_client.return_value = mock_minio
 
     from src.transformer import Transformer
 
@@ -279,10 +290,10 @@ def test_transformation_preserves_data_integrity(
 
 @pytest.mark.integration
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_loader_deduplication(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
 ):
     """Test that loader handles duplicate data correctly"""
     mock_minio = Mock()
@@ -299,7 +310,7 @@ def test_loader_deduplication(
     )
 
     mock_minio.read_parquet.return_value = df
-    MockMinIOClass.return_value = mock_minio
+    mock_get_minio_client.return_value = mock_minio
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 1  # Only one after dedup
@@ -322,15 +333,15 @@ def test_loader_deduplication(
 
 @pytest.mark.integration
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
 def test_extraction_partial_failure_recovery(
-    mock_get_cities, MockMinIOClass, sample_openweather_response
+    mock_get_cities, mock_get_minio_client, sample_openweather_response
 ):
     """Test extraction continues after partial failures"""
     mock_minio = Mock()
     mock_minio.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio
+    mock_get_minio_client.return_value = mock_minio
 
     # First city succeeds, second fails, third succeeds
     responses.add(
@@ -370,8 +381,8 @@ def test_extraction_partial_failure_recovery(
 
 
 @pytest.mark.integration
-@patch("src.transformer.MinIOClient")
-def test_transformation_handles_corrupted_file(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transformation_handles_corrupted_file(mock_get_minio_client):
     """Test transformation gracefully handles corrupted JSON"""
     mock_minio = Mock()
 
@@ -385,7 +396,7 @@ def test_transformation_handles_corrupted_file(MockMinIOClass):
 
     mock_minio.read_json.side_effect = [valid_data, Exception("JSON decode error")]
     mock_minio.upload_parquet.return_value = 2048
-    MockMinIOClass.return_value = mock_minio
+    mock_get_minio_client.return_value = mock_minio
 
     from src.transformer import Transformer
 

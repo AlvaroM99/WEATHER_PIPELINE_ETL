@@ -11,16 +11,26 @@ import pandas as pd
 import pytest
 
 from src.loader import Loader
+from src.utils.minio_client import reset_minio_client
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_singleton():
+    """Reset MinIO singleton before and after each test."""
+    reset_minio_client()
+    yield
+    reset_minio_client()
+
 
 # ===== Utility Method Tests =====
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_get_date_id_valid_date(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_get_date_id_valid_date(mock_get_minio_client):
     """Test get_date_id converts date string to integer correctly"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -34,11 +44,11 @@ def test_get_date_id_valid_date(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_get_date_id_invalid_date(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_get_date_id_invalid_date(mock_get_minio_client):
     """Test get_date_id handles invalid dates"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -47,11 +57,11 @@ def test_get_date_id_invalid_date(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_clean_value_nan_handling(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_clean_value_nan_handling(mock_get_minio_client):
     """Test clean_value converts NaN to None for database"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -70,13 +80,13 @@ def test_clean_value_nan_handling(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_get_city_id_mapping(mock_connect, MockMinIOClass, mock_db_connection):
+def test_get_city_id_mapping(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test get_city_id_mapping returns correct dictionaries"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mock
     mock_cursor = Mock()
@@ -110,12 +120,12 @@ def test_get_city_id_mapping(mock_connect, MockMinIOClass, mock_db_connection):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_get_db_connection(mock_connect, MockMinIOClass):
+def test_get_db_connection(mock_connect, mock_get_minio_client):
     """Test database connection creation"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_conn = Mock()
     mock_connect.return_value = mock_conn
@@ -133,16 +143,20 @@ def test_get_db_connection(mock_connect, MockMinIOClass):
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_observation_success(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection, sample_transformed_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_transformed_df,
 ):
     """Test successful loading of weather observations"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.read_parquet.return_value = sample_transformed_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
     mock_cursor = Mock()
@@ -163,9 +177,11 @@ def test_load_fact_observation_success(
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_observation_city_not_found(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_fact_observation_city_not_found(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test loading handles cities not in dimension table"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -175,7 +191,7 @@ def test_load_fact_observation_city_not_found(mock_connect, MockMinIOClass, mock
     )
 
     mock_minio_instance.read_parquet.return_value = test_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
     mock_cursor = Mock()
@@ -197,14 +213,14 @@ def test_load_fact_observation_city_not_found(mock_connect, MockMinIOClass, mock
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_observation_no_data(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_fact_observation_no_data(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test loading with no data available"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.read_parquet.side_effect = Exception("File not found")
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_connect.return_value = mock_db_connection
 
@@ -218,9 +234,11 @@ def test_load_fact_observation_no_data(mock_connect, MockMinIOClass, mock_db_con
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_observation_rollback_on_error(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_fact_observation_rollback_on_error(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test that database transaction rolls back on error"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -230,7 +248,7 @@ def test_load_fact_observation_rollback_on_error(mock_connect, MockMinIOClass, m
     )
 
     mock_minio_instance.read_parquet.return_value = test_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
     mock_cursor = Mock()
@@ -255,10 +273,14 @@ def test_load_fact_observation_rollback_on_error(mock_connect, MockMinIOClass, m
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_generic_success(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection, sample_silver_parquet_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_silver_parquet_df,
 ):
     """Test _load_generic helper method"""
     # Setup MinIO mock
@@ -270,7 +292,7 @@ def test_load_generic_success(
     mock_minio_instance.client.list_objects.return_value = [mock_obj]
     mock_minio_instance.read_parquet.return_value = sample_silver_parquet_df
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
     mock_cursor = Mock()
@@ -295,10 +317,10 @@ def test_load_generic_success(
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_generic_deduplication(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
 ):
     """Test _load_generic removes duplicate rows"""
     # Setup MinIO mock
@@ -319,7 +341,7 @@ def test_load_generic_deduplication(
     mock_minio_instance.client.list_objects.return_value = [mock_obj]
     mock_minio_instance.read_parquet.return_value = duplicate_df
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
     mock_cursor = Mock()
@@ -340,14 +362,14 @@ def test_load_generic_deduplication(
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_generic_no_files_found(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_generic_no_files_found(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test _load_generic handles no files found"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_connect.return_value = mock_db_connection
 
@@ -364,11 +386,11 @@ def test_load_generic_no_files_found(mock_connect, MockMinIOClass, mock_db_conne
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_map_daily_forecast(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_map_daily_forecast(mock_get_minio_client):
     """Test _map_daily_forecast mapper function"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -411,11 +433,11 @@ def test_map_daily_forecast(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_map_air_quality(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_map_air_quality(mock_get_minio_client):
     """Test _map_air_quality mapper function"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -446,11 +468,11 @@ def test_map_air_quality(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_map_air_quality_handles_nan(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_map_air_quality_handles_nan(mock_get_minio_client):
     """Test _map_air_quality handles NaN values"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -484,11 +506,11 @@ def test_map_air_quality_handles_nan(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_loader_initialization(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_loader_initialization(mock_get_minio_client):
     """Test Loader initializes correctly"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -498,9 +520,9 @@ def test_loader_initialization(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_loader_logging(mock_connect, MockMinIOClass, mock_db_connection, caplog):
+def test_loader_logging(mock_connect, mock_get_minio_client, mock_db_connection, caplog):
     """Test that loader logs operations"""
     import logging
 
@@ -508,7 +530,7 @@ def test_loader_logging(mock_connect, MockMinIOClass, mock_db_connection, caplog
 
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_connect.return_value = mock_db_connection
 
@@ -527,13 +549,13 @@ def test_loader_logging(mock_connect, MockMinIOClass, mock_db_connection, caplog
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_connection_closed_on_success(mock_connect, MockMinIOClass, mock_db_connection):
+def test_connection_closed_on_success(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test database connection is closed after successful operation"""
     mock_minio_instance = Mock()
     mock_minio_instance.read_parquet.side_effect = Exception("No file")
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
@@ -549,12 +571,12 @@ def test_connection_closed_on_success(mock_connect, MockMinIOClass, mock_db_conn
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_connection_closed_on_error(mock_connect, MockMinIOClass, mock_db_connection):
+def test_connection_closed_on_error(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test database connection is closed even on error"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.side_effect = Exception("Query error")
@@ -576,10 +598,10 @@ def test_connection_closed_on_error(mock_connect, MockMinIOClass, mock_db_connec
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_forecast_hourly(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
 ):
     """Test loading hourly forecast data"""
     mock_minio_instance = Mock()
@@ -601,7 +623,7 @@ def test_load_fact_forecast_hourly(
     )
 
     mock_minio_instance.read_parquet.return_value = hourly_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 2
@@ -617,10 +639,10 @@ def test_load_fact_forecast_hourly(
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_air_quality(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
 ):
     """Test loading air quality data"""
     mock_minio_instance = Mock()
@@ -642,7 +664,7 @@ def test_load_fact_air_quality(
     )
 
     mock_minio_instance.read_parquet.return_value = air_quality_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 2
@@ -658,9 +680,11 @@ def test_load_fact_air_quality(
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_pollen(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+def test_load_fact_pollen(
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
+):
     """Test loading pollen data"""
     mock_minio_instance = Mock()
 
@@ -679,7 +703,7 @@ def test_load_fact_pollen(mock_connect, MockMinIOClass, mock_execute_values, moc
     )
 
     mock_minio_instance.read_parquet.return_value = pollen_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 2
@@ -695,9 +719,11 @@ def test_load_fact_pollen(mock_connect, MockMinIOClass, mock_execute_values, moc
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_marine(mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection):
+def test_load_fact_marine(
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
+):
     """Test loading marine data"""
     mock_minio_instance = Mock()
 
@@ -715,7 +741,7 @@ def test_load_fact_marine(mock_connect, MockMinIOClass, mock_execute_values, moc
     )
 
     mock_minio_instance.read_parquet.return_value = marine_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 2
@@ -730,13 +756,13 @@ def test_load_fact_marine(mock_connect, MockMinIOClass, mock_execute_values, moc
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_handles_empty_dataframe(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_handles_empty_dataframe(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test loading handles empty DataFrame"""
     mock_minio_instance = Mock()
     mock_minio_instance.read_parquet.return_value = pd.DataFrame()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
@@ -750,9 +776,9 @@ def test_load_handles_empty_dataframe(mock_connect, MockMinIOClass, mock_db_conn
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_handles_missing_city_mapping(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_handles_missing_city_mapping(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test loading handles missing city mapping"""
     mock_minio_instance = Mock()
 
@@ -766,7 +792,7 @@ def test_load_handles_missing_city_mapping(mock_connect, MockMinIOClass, mock_db
     )
 
     mock_minio_instance.read_parquet.return_value = df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.side_effect = [[], []]  # No city mapping
@@ -781,11 +807,11 @@ def test_load_handles_missing_city_mapping(mock_connect, MockMinIOClass, mock_db
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_clean_value_with_various_types(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_clean_value_with_various_types(mock_get_minio_client):
     """Test clean_value handles various data types"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -804,11 +830,11 @@ def test_clean_value_with_various_types(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_get_date_id_edge_cases(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_get_date_id_edge_cases(mock_get_minio_client):
     """Test get_date_id with edge cases"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -832,12 +858,12 @@ def test_get_date_id_edge_cases(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_get_station_id_mapping(mock_connect, MockMinIOClass, mock_db_connection):
+def test_get_station_id_mapping(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test get_station_id_mapping returns correct dictionary"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.return_value = [("3129", 1), ("0076", 2)]
@@ -855,10 +881,14 @@ def test_get_station_id_mapping(mock_connect, MockMinIOClass, mock_db_connection
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_aemet_stations_success(
-    mock_connect, MockMinIOClass, mock_execute_values, mock_db_connection, sample_aemet_silver_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_aemet_silver_df,
 ):
     """Test successful AEMET stations loading"""
     mock_minio_instance = Mock()
@@ -868,7 +898,7 @@ def test_load_aemet_stations_success(
 
     mock_minio_instance.client.list_objects.return_value = [mock_obj]
     mock_minio_instance.read_parquet.return_value = sample_aemet_silver_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 2
@@ -884,15 +914,15 @@ def test_load_aemet_stations_success(
 
 @pytest.mark.unit
 @patch("src.loader.DimensionalLoader")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_aemet_stations_fallback_to_dimensional_loader(
-    mock_connect, MockMinIOClass, MockDimensionalLoader, mock_db_connection
+    mock_connect, mock_get_minio_client, MockDimensionalLoader, mock_db_connection
 ):
     """Test AEMET stations loading falls back to DimensionalLoader when no silver data"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []  # No files
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_dim_loader_instance = Mock()
     MockDimensionalLoader.return_value = mock_dim_loader_instance
@@ -910,11 +940,11 @@ def test_load_aemet_stations_fallback_to_dimensional_loader(
 
 @pytest.mark.unit
 @patch("src.loader.execute_values")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_aemet_daily_success(
     mock_connect,
-    MockMinIOClass,
+    mock_get_minio_client,
     mock_execute_values,
     mock_db_connection,
     sample_aemet_daily_silver_df,
@@ -927,7 +957,7 @@ def test_load_fact_aemet_daily_success(
 
     mock_minio_instance.client.list_objects.return_value = [mock_obj]
     mock_minio_instance.read_parquet.return_value = sample_aemet_daily_silver_df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.rowcount = 1
@@ -944,13 +974,13 @@ def test_load_fact_aemet_daily_success(
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_aemet_daily_no_files(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_fact_aemet_daily_no_files(mock_connect, mock_get_minio_client, mock_db_connection):
     """Test AEMET daily loading with no files"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.return_value = [("3129", 1)]
@@ -965,17 +995,17 @@ def test_load_fact_aemet_daily_no_files(mock_connect, MockMinIOClass, mock_db_co
 
 @pytest.mark.unit
 @patch("src.loader.DimensionalLoader")
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_aemet_daily_loads_stations_if_missing(
-    mock_connect, MockMinIOClass, MockDimensionalLoader, mock_db_connection
+    mock_connect, mock_get_minio_client, MockDimensionalLoader, mock_db_connection
 ):
     """Test AEMET daily loading loads stations first if missing"""
     mock_minio_instance = Mock()
 
     # Return empty list - no files to process
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_dim_loader_instance = Mock()
     MockDimensionalLoader.return_value = mock_dim_loader_instance
@@ -997,10 +1027,10 @@ def test_load_fact_aemet_daily_loads_stations_if_missing(
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_aemet_daily_skips_unknown_stations(
-    mock_connect, MockMinIOClass, mock_db_connection
+    mock_connect, mock_get_minio_client, mock_db_connection
 ):
     """Test AEMET daily loading skips unknown stations"""
     mock_minio_instance = Mock()
@@ -1012,7 +1042,7 @@ def test_load_fact_aemet_daily_skips_unknown_stations(
     # DataFrame with unknown station
     df = pd.DataFrame([{"station_id": "UNKNOWN", "date": "2026-01-29", "temp_avg": 10.0}])
     mock_minio_instance.read_parquet.return_value = df
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.return_value = [("3129", 1)]  # UNKNOWN not in mapping
@@ -1027,13 +1057,15 @@ def test_load_fact_aemet_daily_skips_unknown_stations(
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
+@patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_aemet_historical_no_files(mock_connect, MockMinIOClass, mock_db_connection):
+def test_load_fact_aemet_historical_no_files(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test AEMET historical loading with no files"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_cursor = Mock()
     mock_cursor.fetchall.return_value = [("3129", 1)]
@@ -1047,11 +1079,11 @@ def test_load_fact_aemet_historical_no_files(mock_connect, MockMinIOClass, mock_
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_loader_log_methods(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_loader_log_methods(mock_get_minio_client):
     """Test loader logging utility methods"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
 
@@ -1063,11 +1095,11 @@ def test_loader_log_methods(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_loader_validation_disabled_by_default(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_loader_validation_disabled_by_default(mock_get_minio_client):
     """Test loader validation is disabled when great_expectations not installed"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # When DATA_QUALITY_AVAILABLE is False, validation should be disabled
     loader = Loader(enable_validation=True)
@@ -1078,11 +1110,11 @@ def test_loader_validation_disabled_by_default(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_loader_get_quality_report(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_loader_get_quality_report(mock_get_minio_client):
     """Test get_quality_report returns empty dict when no validations run"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
     report = loader.get_quality_report()
@@ -1091,11 +1123,11 @@ def test_loader_get_quality_report(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.loader.MinIOClient")
-def test_loader_get_validation_result(MockMinIOClass):
+@patch("src.loader.get_minio_client")
+def test_loader_get_validation_result(mock_get_minio_client):
     """Test get_validation_result returns None for unknown table"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     loader = Loader()
     result = loader.get_validation_result("unknown_table")
