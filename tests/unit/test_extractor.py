@@ -10,6 +10,15 @@ import pytest
 import responses
 
 from src.extractor import Extractor
+from src.utils.minio_client import reset_minio_client
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_singleton():
+    """Reset MinIO singleton before and after each test."""
+    reset_minio_client()
+    yield
+    reset_minio_client()
 
 # ===== OpenWeather Tests =====
 
@@ -17,11 +26,11 @@ from src.extractor import Extractor
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
 def test_extract_openweather_success(
     mock_get_cities,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openweather_response,
     sample_cities,
     mock_airflow_context,
@@ -30,7 +39,7 @@ def test_extract_openweather_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -62,13 +71,13 @@ def test_extract_openweather_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
-def test_extract_openweather_api_error(mock_get_cities, MockMinIOClass, sample_cities):
+def test_extract_openweather_api_error(mock_get_cities, mock_get_minio_client, sample_cities):
     """Test OpenWeather extraction handles API errors gracefully"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks - API returns 401 Unauthorized
     responses.add(
@@ -93,16 +102,16 @@ def test_extract_openweather_api_error(mock_get_cities, MockMinIOClass, sample_c
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
 def test_extract_openweather_partial_failure(
-    mock_get_cities, MockMinIOClass, sample_openweather_response
+    mock_get_cities, mock_get_minio_client, sample_openweather_response
 ):
     """Test OpenWeather extraction continues after individual city failures"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup: first city succeeds, second fails, third succeeds
     responses.add(
@@ -143,11 +152,11 @@ def test_extract_openweather_partial_failure(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
 def test_extract_openweather_xcom_push(
     mock_get_cities,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openweather_response,
     sample_cities,
     mock_airflow_context,
@@ -156,7 +165,7 @@ def test_extract_openweather_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -185,16 +194,16 @@ def test_extract_openweather_xcom_push(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
 def test_extract_openweather_object_path_format(
-    mock_get_cities, MockMinIOClass, sample_openweather_response, sample_cities
+    mock_get_cities, mock_get_minio_client, sample_openweather_response, sample_cities
 ):
     """Test that MinIO object paths are correctly formatted"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -229,11 +238,11 @@ def test_extract_openweather_object_path_format(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_daily_success(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openmeteo_daily_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -242,7 +251,7 @@ def test_extract_openmeteo_daily_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -274,11 +283,11 @@ def test_extract_openmeteo_daily_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_daily_with_api_key(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openmeteo_daily_response,
     sample_capitals_df,
     monkeypatch,
@@ -287,7 +296,7 @@ def test_extract_openmeteo_daily_with_api_key(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup API key in environment
     monkeypatch.setenv("OPENMETEO_API_KEY", "test_key_12345")
@@ -314,16 +323,16 @@ def test_extract_openmeteo_daily_with_api_key(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_daily_object_path(
-    mock_get_capitals, MockMinIOClass, sample_openmeteo_daily_response, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_openmeteo_daily_response, sample_capitals_df
 ):
     """Test Open-Meteo daily object path format"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -355,13 +364,13 @@ def test_extract_openmeteo_daily_object_path(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_openmeteo_daily_api_error(mock_get_capitals, MockMinIOClass, sample_capitals_df):
+def test_extract_openmeteo_daily_api_error(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
     """Test Open-Meteo extraction handles API errors"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mock - API returns 500 error
     responses.add(
@@ -384,11 +393,11 @@ def test_extract_openmeteo_daily_api_error(mock_get_capitals, MockMinIOClass, sa
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_daily_xcom_push(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openmeteo_daily_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -397,7 +406,7 @@ def test_extract_openmeteo_daily_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -427,13 +436,13 @@ def test_extract_openmeteo_daily_xcom_push(
 
 
 @pytest.mark.unit
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
-def test_extract_openweather_empty_cities(mock_get_cities, MockMinIOClass):
+def test_extract_openweather_empty_cities(mock_get_cities, mock_get_minio_client):
     """Test extraction with no cities"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_get_cities.return_value = []
 
@@ -447,9 +456,9 @@ def test_extract_openweather_empty_cities(mock_get_cities, MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_cities")
-def test_extractor_logging(mock_get_cities, MockMinIOClass, caplog):
+def test_extractor_logging(mock_get_cities, mock_get_minio_client, caplog):
     """Test that extractor logs operations"""
     import logging
 
@@ -457,7 +466,7 @@ def test_extractor_logging(mock_get_cities, MockMinIOClass, caplog):
 
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_get_cities.return_value = []
 
@@ -474,12 +483,12 @@ def test_extractor_logging(mock_get_cities, MockMinIOClass, caplog):
 
 
 @pytest.mark.unit
-@patch("src.extractor.MinIOClient")
-def test_extractor_initialization(MockMinIOClass):
+@patch("src.extractor.get_minio_client")
+def test_extractor_initialization(mock_get_minio_client):
     """Test Extractor initializes correctly"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     extractor = Extractor()
 
@@ -495,11 +504,11 @@ def test_extractor_initialization(MockMinIOClass):
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_hourly_success(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openmeteo_hourly_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -508,7 +517,7 @@ def test_extract_openmeteo_hourly_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -538,16 +547,16 @@ def test_extract_openmeteo_hourly_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_hourly_object_path(
-    mock_get_capitals, MockMinIOClass, sample_openmeteo_hourly_response, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_openmeteo_hourly_response, sample_capitals_df
 ):
     """Test Open-Meteo hourly object path format"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -578,13 +587,13 @@ def test_extract_openmeteo_hourly_object_path(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_openmeteo_hourly_api_error(mock_get_capitals, MockMinIOClass, sample_capitals_df):
+def test_extract_openmeteo_hourly_api_error(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
     """Test Open-Meteo hourly extraction handles API errors"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mock - API returns 500 error
     responses.add(
@@ -606,11 +615,11 @@ def test_extract_openmeteo_hourly_api_error(mock_get_capitals, MockMinIOClass, s
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_openmeteo_hourly_xcom_push(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_openmeteo_hourly_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -619,7 +628,7 @@ def test_extract_openmeteo_hourly_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -650,11 +659,11 @@ def test_extract_openmeteo_hourly_xcom_push(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_air_quality_success(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_air_quality_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -663,7 +672,7 @@ def test_extract_air_quality_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -686,16 +695,16 @@ def test_extract_air_quality_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_air_quality_object_path(
-    mock_get_capitals, MockMinIOClass, sample_air_quality_response, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_air_quality_response, sample_capitals_df
 ):
     """Test air quality object path format"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -726,15 +735,15 @@ def test_extract_air_quality_object_path(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_air_quality_non_200_response(
-    mock_get_capitals, MockMinIOClass, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_capitals_df
 ):
     """Test air quality extraction skips non-200 responses"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mock - API returns non-200 (silently skipped)
     responses.add(
@@ -757,11 +766,11 @@ def test_extract_air_quality_non_200_response(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_air_quality_xcom_push(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_air_quality_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -770,7 +779,7 @@ def test_extract_air_quality_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -798,11 +807,11 @@ def test_extract_air_quality_xcom_push(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_pollen_success(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_pollen_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -811,7 +820,7 @@ def test_extract_pollen_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks (pollen uses same URL as air quality)
     responses.add(
@@ -834,16 +843,16 @@ def test_extract_pollen_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_pollen_object_path(
-    mock_get_capitals, MockMinIOClass, sample_pollen_response, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_pollen_response, sample_capitals_df
 ):
     """Test pollen object path format"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -874,13 +883,13 @@ def test_extract_pollen_object_path(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_pollen_non_200_response(mock_get_capitals, MockMinIOClass, sample_capitals_df):
+def test_extract_pollen_non_200_response(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
     """Test pollen extraction skips non-200 responses"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mock - API returns non-200
     responses.add(
@@ -902,11 +911,11 @@ def test_extract_pollen_non_200_response(mock_get_capitals, MockMinIOClass, samp
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_pollen_xcom_push(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_pollen_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -915,7 +924,7 @@ def test_extract_pollen_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -943,11 +952,11 @@ def test_extract_pollen_xcom_push(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_marine_success(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_marine_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -956,7 +965,7 @@ def test_extract_marine_success(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -979,16 +988,16 @@ def test_extract_marine_success(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_marine_object_path(
-    mock_get_capitals, MockMinIOClass, sample_marine_response, sample_capitals_df
+    mock_get_capitals, mock_get_minio_client, sample_marine_response, sample_capitals_df
 ):
     """Test marine object path format"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -1019,13 +1028,13 @@ def test_extract_marine_object_path(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_marine_non_200_response(mock_get_capitals, MockMinIOClass, sample_capitals_df):
+def test_extract_marine_non_200_response(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
     """Test marine extraction skips non-200 responses"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mock - API returns non-200
     responses.add(
@@ -1047,11 +1056,11 @@ def test_extract_marine_non_200_response(mock_get_capitals, MockMinIOClass, samp
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
 def test_extract_marine_xcom_push(
     mock_get_capitals,
-    MockMinIOClass,
+    mock_get_minio_client,
     sample_marine_response,
     sample_capitals_df,
     mock_airflow_context,
@@ -1060,7 +1069,7 @@ def test_extract_marine_xcom_push(
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup mocks
     responses.add(
@@ -1088,13 +1097,13 @@ def test_extract_marine_xcom_push(
 @pytest.mark.unit
 @pytest.mark.api
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_openmeteo_daily_empty_dataframe(mock_get_capitals, MockMinIOClass):
+def test_extract_openmeteo_daily_empty_dataframe(mock_get_capitals, mock_get_minio_client):
     """Test extraction with empty capitals dataframe"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Empty dataframe
     import pandas as pd
@@ -1115,12 +1124,12 @@ def test_extract_openmeteo_daily_empty_dataframe(mock_get_capitals, MockMinIOCla
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_success(mock_get_api_key, MockMinIOClass, sample_aemet_stations_response):
+def test_aemet_request_success(mock_get_api_key, mock_get_minio_client, sample_aemet_stations_response):
     """Test successful AEMET API two-step request"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_aemet_api_key"
 
     # Step 1: Initial request returns data URL
@@ -1151,12 +1160,12 @@ def test_aemet_request_success(mock_get_api_key, MockMinIOClass, sample_aemet_st
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_no_api_key(mock_get_api_key, MockMinIOClass):
+def test_aemet_request_no_api_key(mock_get_api_key, mock_get_minio_client):
     """Test AEMET request fails when no API key"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = None
 
     extractor = Extractor()
@@ -1167,12 +1176,12 @@ def test_aemet_request_no_api_key(mock_get_api_key, MockMinIOClass):
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_api_error(mock_get_api_key, MockMinIOClass):
+def test_aemet_request_api_error(mock_get_api_key, mock_get_minio_client):
     """Test AEMET request handles API errors"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # API returns error status
@@ -1191,15 +1200,15 @@ def test_aemet_request_api_error(mock_get_api_key, MockMinIOClass):
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
 def test_extract_aemet_stations_success(
-    mock_get_api_key, MockMinIOClass, sample_aemet_stations_response, mock_airflow_context
+    mock_get_api_key, mock_get_minio_client, sample_aemet_stations_response, mock_airflow_context
 ):
     """Test successful AEMET stations extraction"""
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # Step 1: Initial request
@@ -1237,12 +1246,12 @@ def test_extract_aemet_stations_success(
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_extract_aemet_stations_no_data(mock_get_api_key, MockMinIOClass):
+def test_extract_aemet_stations_no_data(mock_get_api_key, mock_get_minio_client):
     """Test AEMET stations extraction with no data"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # API returns error
@@ -1262,15 +1271,15 @@ def test_extract_aemet_stations_no_data(mock_get_api_key, MockMinIOClass):
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
 def test_extract_aemet_daily_climatology_success(
-    mock_get_api_key, MockMinIOClass, sample_aemet_daily_response, mock_airflow_context
+    mock_get_api_key, mock_get_minio_client, sample_aemet_daily_response, mock_airflow_context
 ):
     """Test successful AEMET daily climatology extraction"""
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # Mock API response for each station (we use 1 station for simplicity)
@@ -1306,13 +1315,13 @@ def test_extract_aemet_daily_climatology_success(
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_extract_aemet_daily_climatology_partial_failure(mock_get_api_key, MockMinIOClass):
+def test_extract_aemet_daily_climatology_partial_failure(mock_get_api_key, mock_get_minio_client):
     """Test AEMET daily extraction handles station failures"""
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # First station succeeds
@@ -1347,12 +1356,12 @@ def test_extract_aemet_daily_climatology_partial_failure(mock_get_api_key, MockM
 
 
 @pytest.mark.unit
-@patch("src.extractor.MinIOClient")
-def test_extract_aemet_stations_xcom_push(MockMinIOClass, mock_airflow_context):
+@patch("src.extractor.get_minio_client")
+def test_extract_aemet_stations_xcom_push(mock_get_minio_client, mock_airflow_context):
     """Test AEMET stations extraction pushes to XCom"""
     mock_minio_instance = Mock()
     mock_minio_instance.upload_json.return_value = 1024
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     extractor = Extractor()
 
@@ -1371,11 +1380,11 @@ def test_extract_aemet_stations_xcom_push(MockMinIOClass, mock_airflow_context):
 
 
 @pytest.mark.unit
-@patch("src.extractor.MinIOClient")
-def test_extractor_log_methods(MockMinIOClass):
+@patch("src.extractor.get_minio_client")
+def test_extractor_log_methods(mock_get_minio_client):
     """Test extractor logging utility methods"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     extractor = Extractor()
 
@@ -1388,12 +1397,12 @@ def test_extractor_log_methods(MockMinIOClass):
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_no_data_url(mock_get_api_key, MockMinIOClass):
+def test_aemet_request_no_data_url(mock_get_api_key, mock_get_minio_client):
     """Test AEMET request handles missing data URL"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # API returns success but no data URL
@@ -1412,12 +1421,12 @@ def test_aemet_request_no_data_url(mock_get_api_key, MockMinIOClass):
 
 @pytest.mark.unit
 @responses.activate
-@patch("src.extractor.MinIOClient")
+@patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_json_decode_error(mock_get_api_key, MockMinIOClass):
+def test_aemet_request_json_decode_error(mock_get_api_key, mock_get_minio_client):
     """Test AEMET request handles JSON decode errors"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
     mock_get_api_key.return_value = "test_api_key"
 
     # API returns invalid JSON

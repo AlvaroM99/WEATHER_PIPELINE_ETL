@@ -10,14 +10,23 @@ import pandas as pd
 import pytest
 
 from src.transformer import Transformer
+from src.utils.minio_client import reset_minio_client
+
+
+@pytest.fixture(autouse=True)
+def reset_minio_singleton():
+    """Reset MinIO singleton before and after each test."""
+    reset_minio_client()
+    yield
+    reset_minio_client()
 
 # ===== OpenWeather Transformation Tests =====
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_openweather_success(
-    MockMinIOClass, sample_openweather_response, mock_airflow_context
+    mock_get_minio_client, sample_openweather_response, mock_airflow_context
 ):
     """Test successful OpenWeather transformation from JSON to Parquet"""
     # Setup MinIO mock
@@ -36,7 +45,7 @@ def test_transform_openweather_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -57,8 +66,8 @@ def test_transform_openweather_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_field_mapping(MockMinIOClass, sample_openweather_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_field_mapping(mock_get_minio_client, sample_openweather_response):
     """Test that OpenWeather fields are correctly mapped"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -75,7 +84,7 @@ def test_transform_openweather_field_mapping(MockMinIOClass, sample_openweather_
     mock_minio_instance.read_json.return_value = sample_openweather_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -118,8 +127,8 @@ def test_transform_openweather_field_mapping(MockMinIOClass, sample_openweather_
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_fallback_scan(MockMinIOClass, sample_openweather_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_fallback_scan(mock_get_minio_client, sample_openweather_response):
     """Test transformation fallback when XCom is not available"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -136,7 +145,7 @@ def test_transform_openweather_fallback_scan(MockMinIOClass, sample_openweather_
     mock_minio_instance.read_json.return_value = sample_openweather_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -151,13 +160,13 @@ def test_transform_openweather_fallback_scan(MockMinIOClass, sample_openweather_
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_no_data(mock_get_minio_client):
     """Test transformation with no bronze data"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -170,8 +179,8 @@ def test_transform_openweather_no_data(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_multiple_cities(MockMinIOClass, sample_openweather_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_multiple_cities(mock_get_minio_client, sample_openweather_response):
     """Test transformation with multiple city records"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -199,7 +208,7 @@ def test_transform_openweather_multiple_cities(MockMinIOClass, sample_openweathe
     mock_minio_instance.read_json.side_effect = read_json_side_effect
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -221,9 +230,9 @@ def test_transform_openweather_multiple_cities(MockMinIOClass, sample_openweathe
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_openmeteo_daily_success(
-    MockMinIOClass, sample_openmeteo_daily_response, mock_airflow_context
+    mock_get_minio_client, sample_openmeteo_daily_response, mock_airflow_context
 ):
     """Test successful Open-Meteo daily transformation"""
     # Setup MinIO mock
@@ -235,7 +244,7 @@ def test_transform_openmeteo_daily_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -258,8 +267,8 @@ def test_transform_openmeteo_daily_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_generic_with_daily_data(MockMinIOClass, sample_openmeteo_daily_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_generic_with_daily_data(mock_get_minio_client, sample_openmeteo_daily_response):
     """Test _transform_generic helper with daily forecast data"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -268,7 +277,7 @@ def test_transform_generic_with_daily_data(MockMinIOClass, sample_openmeteo_dail
     mock_minio_instance.read_json.return_value = sample_openmeteo_daily_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -291,8 +300,8 @@ def test_transform_generic_with_daily_data(MockMinIOClass, sample_openmeteo_dail
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_generic_fallback_to_bucket_scan(MockMinIOClass, sample_openmeteo_daily_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_generic_fallback_to_bucket_scan(mock_get_minio_client, sample_openmeteo_daily_response):
     """Test _transform_generic falls back to bucket scanning"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -303,7 +312,7 @@ def test_transform_generic_fallback_to_bucket_scan(MockMinIOClass, sample_openme
     mock_minio_instance.read_json.return_value = sample_openmeteo_daily_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -318,8 +327,8 @@ def test_transform_generic_fallback_to_bucket_scan(MockMinIOClass, sample_openme
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_generic_multiple_cities(MockMinIOClass, sample_openmeteo_daily_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_generic_multiple_cities(mock_get_minio_client, sample_openmeteo_daily_response):
     """Test _transform_generic concatenates multiple city DataFrames"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -344,7 +353,7 @@ def test_transform_generic_multiple_cities(MockMinIOClass, sample_openmeteo_dail
     mock_minio_instance.read_json.side_effect = read_json_side_effect
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -369,8 +378,8 @@ def test_transform_generic_multiple_cities(MockMinIOClass, sample_openmeteo_dail
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_malformed_json(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_malformed_json(mock_get_minio_client):
     """Test transformation handles malformed JSON gracefully"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -381,7 +390,7 @@ def test_transform_openweather_malformed_json(MockMinIOClass):
     mock_minio_instance.read_json.return_value = malformed_data
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -396,11 +405,11 @@ def test_transform_openweather_malformed_json(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transformer_initialization(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transformer_initialization(mock_get_minio_client):
     """Test Transformer initializes correctly"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -410,8 +419,8 @@ def test_transformer_initialization(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_logging(MockMinIOClass, caplog):
+@patch("src.transformer.get_minio_client")
+def test_transform_logging(mock_get_minio_client, caplog):
     """Test that transformer logs operations"""
     import logging
 
@@ -419,7 +428,7 @@ def test_transform_logging(MockMinIOClass, caplog):
 
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -433,13 +442,13 @@ def test_transform_logging(MockMinIOClass, caplog):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openmeteo_daily_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_openmeteo_daily_no_data(mock_get_minio_client):
     """Test Open-Meteo transformation with no data"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     # Execute
     transformer = Transformer()
@@ -451,8 +460,8 @@ def test_transform_openmeteo_daily_no_data(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_generic_handles_missing_data_key(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_generic_handles_missing_data_key(mock_get_minio_client):
     """Test _transform_generic handles missing data key gracefully"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -466,7 +475,7 @@ def test_transform_generic_handles_missing_data_key(MockMinIOClass):
     bronze_objects = [{"object_path": "forecast/daily/2026-01-29/madrid.json"}]
     mock_minio_instance.read_json.return_value = invalid_response
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -484,9 +493,9 @@ def test_transform_generic_handles_missing_data_key(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_openmeteo_hourly_success(
-    MockMinIOClass, sample_openmeteo_hourly_response, mock_airflow_context
+    mock_get_minio_client, sample_openmeteo_hourly_response, mock_airflow_context
 ):
     """Test successful Open-Meteo hourly transformation"""
     mock_minio_instance = Mock()
@@ -496,7 +505,7 @@ def test_transform_openmeteo_hourly_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_openmeteo_hourly(**mock_airflow_context)
@@ -513,9 +522,9 @@ def test_transform_openmeteo_hourly_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_openmeteo_hourly_multiple_records(
-    MockMinIOClass, sample_openmeteo_hourly_response
+    mock_get_minio_client, sample_openmeteo_hourly_response
 ):
     """Test hourly transformation creates one row per hour"""
     mock_minio_instance = Mock()
@@ -524,7 +533,7 @@ def test_transform_openmeteo_hourly_multiple_records(
     mock_minio_instance.read_json.return_value = sample_openmeteo_hourly_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -540,9 +549,9 @@ def test_transform_openmeteo_hourly_multiple_records(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_air_quality_success(
-    MockMinIOClass, sample_air_quality_response, mock_airflow_context
+    mock_get_minio_client, sample_air_quality_response, mock_airflow_context
 ):
     """Test successful air quality transformation"""
     mock_minio_instance = Mock()
@@ -559,7 +568,7 @@ def test_transform_air_quality_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_openmeteo_air_quality(**mock_airflow_context)
@@ -574,8 +583,8 @@ def test_transform_air_quality_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_air_quality_columns(MockMinIOClass, sample_air_quality_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_air_quality_columns(mock_get_minio_client, sample_air_quality_response):
     """Test air quality transformation preserves all pollutant columns"""
     mock_minio_instance = Mock()
 
@@ -587,7 +596,7 @@ def test_transform_air_quality_columns(MockMinIOClass, sample_air_quality_respon
     mock_minio_instance.read_json.return_value = sample_air_quality_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -607,8 +616,8 @@ def test_transform_air_quality_columns(MockMinIOClass, sample_air_quality_respon
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_pollen_success(MockMinIOClass, sample_pollen_response, mock_airflow_context):
+@patch("src.transformer.get_minio_client")
+def test_transform_pollen_success(mock_get_minio_client, sample_pollen_response, mock_airflow_context):
     """Test successful pollen transformation"""
     mock_minio_instance = Mock()
 
@@ -621,7 +630,7 @@ def test_transform_pollen_success(MockMinIOClass, sample_pollen_response, mock_a
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_openmeteo_pollen(**mock_airflow_context)
@@ -636,12 +645,12 @@ def test_transform_pollen_success(MockMinIOClass, sample_pollen_response, mock_a
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_pollen_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_pollen_no_data(mock_get_minio_client):
     """Test pollen transformation with no data"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_openmeteo_pollen(ds="2026-01-29", task_instance=None)
@@ -653,8 +662,8 @@ def test_transform_pollen_no_data(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_marine_success(MockMinIOClass, sample_marine_response, mock_airflow_context):
+@patch("src.transformer.get_minio_client")
+def test_transform_marine_success(mock_get_minio_client, sample_marine_response, mock_airflow_context):
     """Test successful marine transformation"""
     mock_minio_instance = Mock()
 
@@ -667,7 +676,7 @@ def test_transform_marine_success(MockMinIOClass, sample_marine_response, mock_a
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_openmeteo_marine(**mock_airflow_context)
@@ -682,8 +691,8 @@ def test_transform_marine_success(MockMinIOClass, sample_marine_response, mock_a
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_marine_coastal_city_data(MockMinIOClass, sample_marine_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_marine_coastal_city_data(mock_get_minio_client, sample_marine_response):
     """Test marine transformation for coastal city"""
     mock_minio_instance = Mock()
 
@@ -695,7 +704,7 @@ def test_transform_marine_coastal_city_data(MockMinIOClass, sample_marine_respon
     mock_minio_instance.read_json.return_value = sample_marine_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -715,8 +724,8 @@ def test_transform_marine_coastal_city_data(MockMinIOClass, sample_marine_respon
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_openweather_missing_metadata(MockMinIOClass, sample_openweather_response):
+@patch("src.transformer.get_minio_client")
+def test_transform_openweather_missing_metadata(mock_get_minio_client, sample_openweather_response):
     """Test transformation handles missing _metadata gracefully"""
     mock_minio_instance = Mock()
 
@@ -728,7 +737,7 @@ def test_transform_openweather_missing_metadata(MockMinIOClass, sample_openweath
     mock_minio_instance.read_json.return_value = sample_openweather_response
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = bronze_objects
@@ -741,8 +750,8 @@ def test_transform_openweather_missing_metadata(MockMinIOClass, sample_openweath
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_generic_exception_handling(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_generic_exception_handling(mock_get_minio_client):
     """Test _transform_generic handles exceptions in individual records"""
     mock_minio_instance = Mock()
 
@@ -757,7 +766,7 @@ def test_transform_generic_exception_handling(MockMinIOClass):
     ]
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = [
@@ -773,8 +782,8 @@ def test_transform_generic_exception_handling(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_with_empty_object_path(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_with_empty_object_path(mock_get_minio_client):
     """Test transformation skips records with empty object_path"""
     mock_minio_instance = Mock()
 
@@ -785,7 +794,7 @@ def test_transform_with_empty_object_path(MockMinIOClass):
     }
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     mock_ti = Mock()
     mock_ti.xcom_pull.return_value = [
@@ -802,11 +811,11 @@ def test_transform_with_empty_object_path(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_get_upstream_data_helper(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_get_upstream_data_helper(mock_get_minio_client):
     """Test _get_upstream_data helper method"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -821,11 +830,11 @@ def test_get_upstream_data_helper(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_get_upstream_data_no_task_instance(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_get_upstream_data_no_task_instance(mock_get_minio_client):
     """Test _get_upstream_data returns None without task_instance"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -838,11 +847,11 @@ def test_get_upstream_data_no_task_instance(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_safe_float_basic(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_safe_float_basic(mock_get_minio_client):
     """Test _safe_float handles basic conversions"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -854,11 +863,11 @@ def test_safe_float_basic(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_safe_float_special_values(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_safe_float_special_values(mock_get_minio_client):
     """Test _safe_float handles AEMET special values"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -871,11 +880,11 @@ def test_safe_float_special_values(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_parse_aemet_coord_latitude(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_parse_aemet_coord_latitude(mock_get_minio_client):
     """Test _parse_aemet_coord parses latitude correctly"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -891,11 +900,11 @@ def test_parse_aemet_coord_latitude(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_parse_aemet_coord_longitude(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_parse_aemet_coord_longitude(mock_get_minio_client):
     """Test _parse_aemet_coord parses longitude correctly"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -911,11 +920,11 @@ def test_parse_aemet_coord_longitude(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_parse_aemet_coord_invalid(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_parse_aemet_coord_invalid(mock_get_minio_client):
     """Test _parse_aemet_coord handles invalid inputs"""
     mock_minio_instance = Mock()
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
 
@@ -926,9 +935,9 @@ def test_parse_aemet_coord_invalid(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_aemet_stations_success(
-    MockMinIOClass, sample_aemet_bronze_data, mock_airflow_context
+    mock_get_minio_client, sample_aemet_bronze_data, mock_airflow_context
 ):
     """Test successful AEMET stations transformation"""
     mock_minio_instance = Mock()
@@ -939,7 +948,7 @@ def test_transform_aemet_stations_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_stations(**mock_airflow_context)
@@ -958,8 +967,8 @@ def test_transform_aemet_stations_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_aemet_stations_fallback_scan(MockMinIOClass, sample_aemet_bronze_data):
+@patch("src.transformer.get_minio_client")
+def test_transform_aemet_stations_fallback_scan(mock_get_minio_client, sample_aemet_bronze_data):
     """Test AEMET stations transformation fallback to bucket scan"""
     mock_minio_instance = Mock()
 
@@ -969,7 +978,7 @@ def test_transform_aemet_stations_fallback_scan(MockMinIOClass, sample_aemet_bro
     mock_minio_instance.read_json.return_value = sample_aemet_bronze_data
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_stations(ds="2026-01-29", task_instance=None)
@@ -980,12 +989,12 @@ def test_transform_aemet_stations_fallback_scan(MockMinIOClass, sample_aemet_bro
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_aemet_stations_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_aemet_stations_no_data(mock_get_minio_client):
     """Test AEMET stations transformation with no data"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_stations(ds="2026-01-29", task_instance=None)
@@ -994,9 +1003,9 @@ def test_transform_aemet_stations_no_data(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_aemet_daily_climatology_success(
-    MockMinIOClass, sample_aemet_daily_bronze_data, mock_airflow_context
+    mock_get_minio_client, sample_aemet_daily_bronze_data, mock_airflow_context
 ):
     """Test successful AEMET daily climatology transformation"""
     mock_minio_instance = Mock()
@@ -1009,7 +1018,7 @@ def test_transform_aemet_daily_climatology_success(
     mock_minio_instance.upload_parquet.return_value = 2048
     mock_airflow_context["task_instance"].xcom_pull.return_value = bronze_objects
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_daily_climatology(**mock_airflow_context)
@@ -1028,9 +1037,9 @@ def test_transform_aemet_daily_climatology_success(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
+@patch("src.transformer.get_minio_client")
 def test_transform_aemet_daily_climatology_fallback_scan(
-    MockMinIOClass, sample_aemet_daily_bronze_data
+    mock_get_minio_client, sample_aemet_daily_bronze_data
 ):
     """Test AEMET daily transformation fallback to bucket scan"""
     mock_minio_instance = Mock()
@@ -1041,7 +1050,7 @@ def test_transform_aemet_daily_climatology_fallback_scan(
     mock_minio_instance.read_json.return_value = sample_aemet_daily_bronze_data
     mock_minio_instance.upload_parquet.return_value = 2048
 
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_daily_climatology(ds="2026-01-29", task_instance=None)
@@ -1050,12 +1059,12 @@ def test_transform_aemet_daily_climatology_fallback_scan(
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_aemet_daily_climatology_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_aemet_daily_climatology_no_data(mock_get_minio_client):
     """Test AEMET daily transformation with no data"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_daily_climatology(ds="2026-01-29", task_instance=None)
@@ -1064,12 +1073,12 @@ def test_transform_aemet_daily_climatology_no_data(MockMinIOClass):
 
 
 @pytest.mark.unit
-@patch("src.transformer.MinIOClient")
-def test_transform_aemet_historical_no_data(MockMinIOClass):
+@patch("src.transformer.get_minio_client")
+def test_transform_aemet_historical_no_data(mock_get_minio_client):
     """Test AEMET historical transformation with no data"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []
-    MockMinIOClass.return_value = mock_minio_instance
+    mock_get_minio_client.return_value = mock_minio_instance
 
     transformer = Transformer()
     result = transformer.transform_aemet_historical(ds="2026-01-29", task_instance=None)
