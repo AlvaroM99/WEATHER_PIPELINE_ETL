@@ -21,6 +21,7 @@ def reset_minio_singleton():
     yield
     reset_minio_client()
 
+
 # ===== Utility Method Tests =====
 
 
@@ -145,7 +146,11 @@ def test_get_db_connection(mock_connect, mock_get_minio_client):
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_fact_observation_success(
-    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection, sample_transformed_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_transformed_df,
 ):
     """Test successful loading of weather observations"""
     # Setup MinIO mock
@@ -174,7 +179,9 @@ def test_load_fact_observation_success(
 @pytest.mark.unit
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_observation_city_not_found(mock_connect, mock_get_minio_client, mock_db_connection):
+def test_load_fact_observation_city_not_found(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test loading handles cities not in dimension table"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -229,7 +236,9 @@ def test_load_fact_observation_no_data(mock_connect, mock_get_minio_client, mock
 @pytest.mark.unit
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_observation_rollback_on_error(mock_connect, mock_get_minio_client, mock_db_connection):
+def test_load_fact_observation_rollback_on_error(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test that database transaction rolls back on error"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -267,7 +276,11 @@ def test_load_fact_observation_rollback_on_error(mock_connect, mock_get_minio_cl
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_generic_success(
-    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection, sample_silver_parquet_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_silver_parquet_df,
 ):
     """Test _load_generic helper method"""
     # Setup MinIO mock
@@ -669,7 +682,9 @@ def test_load_fact_air_quality(
 @patch("src.loader.execute_values")
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_pollen(mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection):
+def test_load_fact_pollen(
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
+):
     """Test loading pollen data"""
     mock_minio_instance = Mock()
 
@@ -706,7 +721,9 @@ def test_load_fact_pollen(mock_connect, mock_get_minio_client, mock_execute_valu
 @patch("src.loader.execute_values")
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_marine(mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection):
+def test_load_fact_marine(
+    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection
+):
     """Test loading marine data"""
     mock_minio_instance = Mock()
 
@@ -867,7 +884,11 @@ def test_get_station_id_mapping(mock_connect, mock_get_minio_client, mock_db_con
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_load_aemet_stations_success(
-    mock_connect, mock_get_minio_client, mock_execute_values, mock_db_connection, sample_aemet_silver_df
+    mock_connect,
+    mock_get_minio_client,
+    mock_execute_values,
+    mock_db_connection,
+    sample_aemet_silver_df,
 ):
     """Test successful AEMET stations loading"""
     mock_minio_instance = Mock()
@@ -1038,7 +1059,9 @@ def test_load_fact_aemet_daily_skips_unknown_stations(
 @pytest.mark.unit
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_load_fact_aemet_historical_no_files(mock_connect, mock_get_minio_client, mock_db_connection):
+def test_load_fact_aemet_historical_no_files(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
     """Test AEMET historical loading with no files"""
     mock_minio_instance = Mock()
     mock_minio_instance.client.list_objects.return_value = []

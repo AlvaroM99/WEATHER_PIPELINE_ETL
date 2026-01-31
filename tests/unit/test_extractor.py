@@ -20,6 +20,7 @@ def reset_minio_singleton():
     yield
     reset_minio_client()
 
+
 # ===== OpenWeather Tests =====
 
 
@@ -366,7 +367,9 @@ def test_extract_openmeteo_daily_object_path(
 @responses.activate
 @patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_openmeteo_daily_api_error(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
+def test_extract_openmeteo_daily_api_error(
+    mock_get_capitals, mock_get_minio_client, sample_capitals_df
+):
     """Test Open-Meteo extraction handles API errors"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -589,7 +592,9 @@ def test_extract_openmeteo_hourly_object_path(
 @responses.activate
 @patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_openmeteo_hourly_api_error(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
+def test_extract_openmeteo_hourly_api_error(
+    mock_get_capitals, mock_get_minio_client, sample_capitals_df
+):
     """Test Open-Meteo hourly extraction handles API errors"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -885,7 +890,9 @@ def test_extract_pollen_object_path(
 @responses.activate
 @patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_pollen_non_200_response(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
+def test_extract_pollen_non_200_response(
+    mock_get_capitals, mock_get_minio_client, sample_capitals_df
+):
     """Test pollen extraction skips non-200 responses"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -1030,7 +1037,9 @@ def test_extract_marine_object_path(
 @responses.activate
 @patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_capitals_dataframe")
-def test_extract_marine_non_200_response(mock_get_capitals, mock_get_minio_client, sample_capitals_df):
+def test_extract_marine_non_200_response(
+    mock_get_capitals, mock_get_minio_client, sample_capitals_df
+):
     """Test marine extraction skips non-200 responses"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -1126,7 +1135,9 @@ def test_extract_openmeteo_daily_empty_dataframe(mock_get_capitals, mock_get_min
 @responses.activate
 @patch("src.extractor.get_minio_client")
 @patch("src.extractor.get_aemet_api_key")
-def test_aemet_request_success(mock_get_api_key, mock_get_minio_client, sample_aemet_stations_response):
+def test_aemet_request_success(
+    mock_get_api_key, mock_get_minio_client, sample_aemet_stations_response
+):
     """Test successful AEMET API two-step request"""
     mock_minio_instance = Mock()
     mock_get_minio_client.return_value = mock_minio_instance

@@ -20,6 +20,7 @@ def reset_minio_singleton():
     yield
     reset_minio_client()
 
+
 # ===== OpenWeather Transformation Tests =====
 
 
@@ -301,7 +302,9 @@ def test_transform_generic_with_daily_data(mock_get_minio_client, sample_openmet
 
 @pytest.mark.unit
 @patch("src.transformer.get_minio_client")
-def test_transform_generic_fallback_to_bucket_scan(mock_get_minio_client, sample_openmeteo_daily_response):
+def test_transform_generic_fallback_to_bucket_scan(
+    mock_get_minio_client, sample_openmeteo_daily_response
+):
     """Test _transform_generic falls back to bucket scanning"""
     # Setup MinIO mock
     mock_minio_instance = Mock()
@@ -617,7 +620,9 @@ def test_transform_air_quality_columns(mock_get_minio_client, sample_air_quality
 
 @pytest.mark.unit
 @patch("src.transformer.get_minio_client")
-def test_transform_pollen_success(mock_get_minio_client, sample_pollen_response, mock_airflow_context):
+def test_transform_pollen_success(
+    mock_get_minio_client, sample_pollen_response, mock_airflow_context
+):
     """Test successful pollen transformation"""
     mock_minio_instance = Mock()
 
@@ -663,7 +668,9 @@ def test_transform_pollen_no_data(mock_get_minio_client):
 
 @pytest.mark.unit
 @patch("src.transformer.get_minio_client")
-def test_transform_marine_success(mock_get_minio_client, sample_marine_response, mock_airflow_context):
+def test_transform_marine_success(
+    mock_get_minio_client, sample_marine_response, mock_airflow_context
+):
     """Test successful marine transformation"""
     mock_minio_instance = Mock()
 
