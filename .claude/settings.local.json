@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(tree:*)",
+      "Bash(docker exec:*)",
+      "Bash(gh pr create --title \"Add secure secrets management with Airflow Connections\" --body \"$\\(cat <<''EOF''\n## Summary\n- Add `SecretsManager` module that prioritizes Airflow Connections over environment variables\n- Auto-configure connections on Airflow startup via `init-connections.sh`\n- Remove hardcoded credentials from config fallbacks\n- Maintain backward compatibility with legacy environment variable access\n\n## Connections Configured\n| Connection ID | Type | Purpose |\n|--------------|------|---------|\n| `postgres_weather` | postgres | Weather database |\n| `minio_datalake` | aws | Data lake storage |\n| `openweather_api` | http | OpenWeatherMap API |\n| `aemet_api` | http | AEMET Spanish Met Agency |\n| `openmeteo_api` | http | Open-Meteo API |\n| `github_api` | http | GitHub token |\n\n## Files Changed\n- `src/weather_config/secrets_manager.py` - New centralized secrets management\n- `docker/airflow/init-connections.sh` - Connection initialization script\n- `docker-compose.yml` - Mount init script\n- `src/weather_config/*.py` - Updated to use SecretsManager\n\n## Test plan\n- [ ] Verify imports work: `python -c \"from weather_config.secrets_manager import SecretsManager\"`\n- [ ] Verify Airflow connections created on container startup\n- [ ] Verify fallback to env vars works outside Airflow context\nEOF\n\\)\")"
+    ]
+  }
+}

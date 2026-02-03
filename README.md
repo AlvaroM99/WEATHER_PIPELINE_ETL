@@ -247,7 +247,7 @@ We defined a skeleton of an algorithm in an operation, deferring some steps to c
 
 ## 📂 Project Structure
 
-```text
+```
 WEATHER_PIPELINE_ETL/
 ├── dags/                       # Airflow DAG Definitions
 │   ├── extraction_pipeline.py
