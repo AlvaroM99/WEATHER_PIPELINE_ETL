@@ -9,7 +9,7 @@ on:
       run_slow_tests:
         description: 'Run slow/long-running tests'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 env:

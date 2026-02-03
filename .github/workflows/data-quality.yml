@@ -20,7 +20,7 @@ on:
       run_full_validation:
         description: 'Run full data validation suite'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 permissions:
