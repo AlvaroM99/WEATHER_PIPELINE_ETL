@@ -1,5 +1,5 @@
 services:
-  # PostgreSQL Database for storing weather data
+  # PostgreSQL Database for Data Warehouse (DWH - Gold Layer)
   postgres:
     image: postgres:13
     environment:
@@ -16,6 +16,23 @@ services:
       - airflow_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Database for Airflow metadata (separate from DWH)
+  postgres-airflow:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME:-airflow}
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    networks:
+      - airflow_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_DB_USER:-airflow}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,9 +58,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-airflow:
+        condition: service_healthy
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow}@postgres-airflow/${AIRFLOW_DB_NAME:-airflow}
       AIRFLOW__CORE__LAZY_LOAD_PLUGINS: "True"
       AIRFLOW__OPENLINEAGE__DISABLED: "True"
       AIRFLOW__WEBSERVER__DEFAULT_USER_USERNAME: ${AIRFLOW_USER}
@@ -116,6 +135,7 @@ services:
 # Define named volumes for persistence
 volumes:
   postgres_data:
+  postgres_airflow_data:
   airflow_logs:
   minio_data:
 

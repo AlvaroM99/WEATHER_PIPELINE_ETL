@@ -66,56 +66,56 @@ with DAG(
         task_id="extract_openweather",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openweather"},
-        provide_context=True,
+
     )
 
     extract_om_daily = PythonOperator(
         task_id="extract_openmeteo_daily",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_daily"},
-        provide_context=True,
+
     )
 
     extract_om_hourly = PythonOperator(
         task_id="extract_openmeteo_hourly",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_hourly"},
-        provide_context=True,
+
     )
 
     extract_om_air_quality = PythonOperator(
         task_id="extract_openmeteo_air_quality",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_air_quality"},
-        provide_context=True,
+
     )
 
     extract_om_pollen = PythonOperator(
         task_id="extract_openmeteo_pollen",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_pollen"},
-        provide_context=True,
+
     )
 
     extract_om_marine = PythonOperator(
         task_id="extract_openmeteo_marine",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_marine"},
-        provide_context=True,
+
     )
 
     extract_aemet_stations = PythonOperator(
         task_id="extract_aemet_stations",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_stations"},
-        provide_context=True,
+
     )
 
     extract_aemet_daily = PythonOperator(
         task_id="extract_aemet_daily_climatology",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_daily_climatology"},
-        provide_context=True,
+
     )
 
     extraction_end = EmptyOperator(task_id="extraction_complete")
@@ -127,56 +127,56 @@ with DAG(
         task_id="transform_openweather",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openweather"},
-        provide_context=True,
+
     )
 
     transform_om_daily = PythonOperator(
         task_id="transform_openmeteo_daily",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openmeteo_daily"},
-        provide_context=True,
+
     )
 
     transform_om_hourly = PythonOperator(
         task_id="transform_openmeteo_hourly",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openmeteo_hourly"},
-        provide_context=True,
+
     )
 
     transform_om_air_quality = PythonOperator(
         task_id="transform_openmeteo_air_quality",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openmeteo_air_quality"},
-        provide_context=True,
+
     )
 
     transform_om_pollen = PythonOperator(
         task_id="transform_openmeteo_pollen",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openmeteo_pollen"},
-        provide_context=True,
+
     )
 
     transform_om_marine = PythonOperator(
         task_id="transform_openmeteo_marine",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_openmeteo_marine"},
-        provide_context=True,
+
     )
 
     transform_aemet_stations = PythonOperator(
         task_id="transform_aemet_stations",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_aemet_stations"},
-        provide_context=True,
+
     )
 
     transform_aemet_daily = PythonOperator(
         task_id="transform_aemet_daily_climatology",
         python_callable=run_transformation,
         op_kwargs={"method_name": "transform_aemet_daily_climatology"},
-        provide_context=True,
+
     )
 
     transformation_end = EmptyOperator(task_id="transformation_complete")
@@ -188,56 +188,56 @@ with DAG(
         task_id="load_fct_observation",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_observation"},
-        provide_context=True,
+
     )
 
     load_daily_weather = PythonOperator(
         task_id="load_fct_forecast_daily",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_forecast_daily"},
-        provide_context=True,
+
     )
 
     load_hourly_weather = PythonOperator(
         task_id="load_fct_forecast_hourly",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_forecast_hourly"},
-        provide_context=True,
+
     )
 
     load_air_quality = PythonOperator(
         task_id="load_fct_air_quality",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_air_quality"},
-        provide_context=True,
+
     )
 
     load_pollen = PythonOperator(
         task_id="load_fct_pollen",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_pollen"},
-        provide_context=True,
+
     )
 
     load_marine = PythonOperator(
         task_id="load_fct_marine",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_marine"},
-        provide_context=True,
+
     )
 
     load_aemet_stations = PythonOperator(
         task_id="load_aemet_stations",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_aemet_stations"},
-        provide_context=True,
+
     )
 
     load_aemet_daily = PythonOperator(
         task_id="load_fct_aemet_daily",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_aemet_daily"},
-        provide_context=True,
+
     )
 
     loading_end = EmptyOperator(task_id="loading_complete")

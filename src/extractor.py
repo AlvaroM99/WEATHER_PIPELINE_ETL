@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import requests
-import urllib3
 
 from src.config.apis.aemet_config import (
     AEMET_BASE_URL,
@@ -50,8 +49,6 @@ from src.utils.city_utils import get_capitals_dataframe, get_cities
 from src.utils.etl_logger import BaseETLLogger
 from src.utils.http_utils import get_retrying_session
 from src.utils.minio_client import MinIOClient, get_minio_client
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class Extractor(BaseETLLogger):
@@ -192,7 +189,7 @@ class Extractor(BaseETLLogger):
             try:
                 self.logger.info(f"Fetching {log_label} for {city['municipio_nombre']}")
                 response: requests.Response = self.session.get(
-                    api_url, params=params, verify=False, timeout=60
+                    api_url, params=params, timeout=60
                 )
                 response.raise_for_status()
                 data: Dict[str, Any] = response.json()

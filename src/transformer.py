@@ -79,8 +79,8 @@ class Transformer(BaseETLLogger):
                     for obj in objects
                     if obj.object_name.endswith(".json")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to scan bronze bucket for {prefix}: {e}")
 
         if not bronze_objects:
             self.logger.warning("No bronze data to transform")
@@ -297,7 +297,8 @@ class Transformer(BaseETLLogger):
                     bronze_objects = context["task_instance"].xcom_pull(key=key, task_ids=task_id)
                     if bronze_objects:
                         break
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"XCom pull failed for task={task_id}, key={key}: {e}")
                     continue
             if bronze_objects:
                 break
@@ -317,8 +318,8 @@ class Transformer(BaseETLLogger):
                     for obj in objects
                     if obj.object_name.endswith(".json")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to scan bronze bucket for {prefix}: {e}")
 
         if not bronze_objects:
             self.logger.warning("No data to transform")
@@ -389,7 +390,8 @@ class Transformer(BaseETLLogger):
                 if val:
                     result: List[BronzeObject] = val
                     return result
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"XCom pull failed for task={task_id}, key={key}: {e}")
                 continue
         return None
 
@@ -431,8 +433,8 @@ class Transformer(BaseETLLogger):
                     for obj in objects
                     if obj.object_name.endswith(".json")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to scan AEMET bronze bucket for {prefix}: {e}")
 
         if not bronze_objects:
             self.logger.warning("No AEMET stations data to transform")
@@ -510,8 +512,8 @@ class Transformer(BaseETLLogger):
                     for obj in objects
                     if obj.object_name.endswith(".json")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to scan AEMET bronze bucket for {prefix}: {e}")
 
         if not bronze_objects:
             self.logger.warning("No AEMET daily climatology data to transform")
@@ -603,8 +605,8 @@ class Transformer(BaseETLLogger):
                     for obj in objects
                     if obj.object_name.endswith(".json")
                 ]
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Failed to scan AEMET bronze bucket for {prefix}: {e}")
 
         if not bronze_objects:
             self.logger.warning("No AEMET historical data to transform")

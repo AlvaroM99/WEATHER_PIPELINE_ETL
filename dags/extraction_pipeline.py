@@ -43,42 +43,42 @@ with DAG(
         task_id="extract_openweather",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openweather"},
-        provide_context=True,
+
     )
 
     extract_om_daily = PythonOperator(
         task_id="extract_openmeteo_daily",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_daily"},
-        provide_context=True,
+
     )
 
     extract_om_hourly = PythonOperator(
         task_id="extract_openmeteo_hourly",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_hourly"},
-        provide_context=True,
+
     )
 
     extract_om_air_quality = PythonOperator(
         task_id="extract_openmeteo_air_quality",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_air_quality"},
-        provide_context=True,
+
     )
 
     extract_om_pollen = PythonOperator(
         task_id="extract_openmeteo_pollen",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_pollen"},
-        provide_context=True,
+
     )
 
     extract_om_marine = PythonOperator(
         task_id="extract_openmeteo_marine",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_marine"},
-        provide_context=True,
+
     )
 
     # AEMET Extraction Tasks
@@ -86,14 +86,14 @@ with DAG(
         task_id="extract_aemet_stations",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_stations"},
-        provide_context=True,
+
     )
 
     extract_aemet_daily = PythonOperator(
         task_id="extract_aemet_daily_climatology",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_daily_climatology"},
-        provide_context=True,
+
     )
 
     end = EmptyOperator(task_id="extraction_complete")

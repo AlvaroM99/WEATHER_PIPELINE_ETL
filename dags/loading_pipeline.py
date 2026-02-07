@@ -43,42 +43,42 @@ with DAG(
         task_id="load_fct_observation",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_observation"},
-        provide_context=True,
+
     )
 
     load_forecast_daily = PythonOperator(
         task_id="load_fct_forecast_daily",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_forecast_daily"},
-        provide_context=True,
+
     )
 
     load_forecast_hourly = PythonOperator(
         task_id="load_fct_forecast_hourly",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_forecast_hourly"},
-        provide_context=True,
+
     )
 
     load_air_quality = PythonOperator(
         task_id="load_fct_air_quality",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_air_quality"},
-        provide_context=True,
+
     )
 
     load_pollen = PythonOperator(
         task_id="load_fct_pollen",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_pollen"},
-        provide_context=True,
+
     )
 
     load_marine = PythonOperator(
         task_id="load_fct_marine",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_marine"},
-        provide_context=True,
+
     )
 
     # AEMET Loading Tasks
@@ -86,14 +86,14 @@ with DAG(
         task_id="load_aemet_stations",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_aemet_stations"},
-        provide_context=True,
+
     )
 
     load_aemet_daily = PythonOperator(
         task_id="load_fct_aemet_daily",
         python_callable=run_loading,
         op_kwargs={"method_name": "load_fact_aemet_daily"},
-        provide_context=True,
+
     )
 
     end = EmptyOperator(task_id="loading_complete")

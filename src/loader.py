@@ -17,12 +17,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-from src.config.database_config import (
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_USER,
-)
+from src.config.db_pool import get_db_connection, return_db_connection
 from src.config.lake_config import (
     SILVER_AEMET_BUCKET,
     SILVER_OPENWEATHER_BUCKET,
@@ -201,14 +196,12 @@ class Loader(BaseETLLogger):
 
     def get_db_connection(self) -> psycopg2.extensions.connection:
         """
-        Get a PostgreSQL database connection.
+        Get a PostgreSQL database connection from the pool.
 
         Returns:
             psycopg2 connection object
         """
-        return psycopg2.connect(
-            host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
-        )
+        return get_db_connection()
 
     def get_city_id_mapping(
         self, conn: psycopg2.extensions.connection
@@ -360,7 +353,7 @@ class Loader(BaseETLLogger):
             self.log_error("Error loading observation", e)
             raise
         finally:
-            conn.close()
+            return_db_connection(conn)
 
     # ========================================================================
     # Fact Forecast Daily Load
@@ -704,7 +697,7 @@ class Loader(BaseETLLogger):
             self.log_error("Error loading marine data", e)
             raise
         finally:
-            conn.close()
+            return_db_connection(conn)
 
     def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""
@@ -827,7 +820,7 @@ class Loader(BaseETLLogger):
             self.log_error("Error loading data", e)
             raise
         finally:
-            conn.close()
+            return_db_connection(conn)
 
     # ========================================================================
     # AEMET Load Methods
@@ -884,7 +877,7 @@ class Loader(BaseETLLogger):
                     f"No AEMET stations files found for {execution_date}, "
                     "loading default stations via DimensionalLoader"
                 )
-                conn.close()
+                return_db_connection(conn)
                 # Fallback: load default stations using DimensionalLoader
                 dim_loader = DimensionalLoader()
                 dim_loader.load_dim_aemet_stations()
@@ -910,7 +903,7 @@ class Loader(BaseETLLogger):
 
             if not records:
                 # No records in silver, load defaults
-                conn.close()
+                return_db_connection(conn)
                 dim_loader = DimensionalLoader()
                 dim_loader.load_dim_aemet_stations()
                 self.log_end("Loaded default AEMET stations (empty silver file)")
@@ -946,7 +939,7 @@ class Loader(BaseETLLogger):
             raise
         finally:
             if not conn.closed:
-                conn.close()
+                return_db_connection(conn)
 
     # Shared INSERT query for AEMET fact table
     _AEMET_INSERT_QUERY = """
@@ -982,7 +975,7 @@ class Loader(BaseETLLogger):
             self.logger.warning(
                 "No AEMET stations found in DB. Loading default stations first..."
             )
-            conn.close()
+            return_db_connection(conn)
             dim_loader = DimensionalLoader()
             dim_loader.load_dim_aemet_stations()
             conn = self.get_db_connection()
@@ -1160,7 +1153,7 @@ class Loader(BaseETLLogger):
             self.log_error("Error loading AEMET daily", e)
             raise
         finally:
-            conn.close()
+            return_db_connection(conn)
 
     def load_fact_aemet_historical(self, **context: Any) -> int:
         """
@@ -1223,4 +1216,4 @@ class Loader(BaseETLLogger):
             self.log_error("Error loading AEMET historical", e)
             raise
         finally:
-            conn.close()
+            return_db_connection(conn)

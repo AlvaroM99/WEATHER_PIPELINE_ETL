@@ -16,12 +16,7 @@ import psycopg2
 import requests
 
 from src.config.apis.aemet_config import DEFAULT_STATIONS
-from src.config.database_config import (
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_USER,
-)
+from src.config.db_pool import get_db_connection, return_db_connection
 from src.type_aliases import AirflowContext
 from src.utils.city_utils import CITIES_CSV_URL
 from src.utils.etl_logger import BaseETLLogger
@@ -43,14 +38,12 @@ class DimensionalLoader(BaseETLLogger):
 
     def get_db_connection(self) -> psycopg2.extensions.connection:
         """
-        Get a PostgreSQL database connection.
+        Get a PostgreSQL database connection from the pool.
 
         Returns:
             psycopg2 connection object
         """
-        return psycopg2.connect(
-            host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
-        )
+        return get_db_connection()
 
     def load_dim_date(self) -> None:
         """
@@ -109,7 +102,7 @@ class DimensionalLoader(BaseETLLogger):
             raise
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_city(self) -> None:
         """
@@ -183,7 +176,7 @@ class DimensionalLoader(BaseETLLogger):
             raise
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_week(self) -> None:
         """Populate dim_week based on dim_date."""
@@ -217,7 +210,7 @@ class DimensionalLoader(BaseETLLogger):
             raise
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_month(self) -> None:
         """Populate dim_month based on dim_date."""
@@ -254,7 +247,7 @@ class DimensionalLoader(BaseETLLogger):
             raise
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_seasons(self) -> None:
         """Load seasons dimension (static data)."""
@@ -297,7 +290,7 @@ class DimensionalLoader(BaseETLLogger):
 
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_layers(self) -> None:
         """Load atmospheric/soil layers dimension (static data)."""
@@ -341,7 +334,7 @@ class DimensionalLoader(BaseETLLogger):
 
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_severity(self) -> None:
         """Load weather severity dimension (static data)."""
@@ -368,7 +361,7 @@ class DimensionalLoader(BaseETLLogger):
 
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_dim_aemet_stations(self) -> None:
         """
@@ -384,23 +377,22 @@ class DimensionalLoader(BaseETLLogger):
         cur: psycopg2.extensions.cursor = conn.cursor()
 
         try:
-            # Build VALUES clause from DEFAULT_STATIONS
-            values_list = ", ".join(
-                f"('{s[0]}', '{s[1]}', '{s[2]}', {s[3]}, {s[4]}, {s[5]})" for s in DEFAULT_STATIONS
-            )
-
-            cur.execute(f"""
-                INSERT INTO dwh.dim_aemet_stations (
-                    station_id, station_name, province, altitude, latitude, longitude
-                ) VALUES {values_list}
-                ON CONFLICT (station_id) DO UPDATE SET
-                    station_name = EXCLUDED.station_name,
-                    province = EXCLUDED.province,
-                    altitude = EXCLUDED.altitude,
-                    latitude = EXCLUDED.latitude,
-                    longitude = EXCLUDED.longitude,
-                    updated_at = CURRENT_TIMESTAMP
-            """)
+            for station in DEFAULT_STATIONS:
+                cur.execute(
+                    """
+                    INSERT INTO dwh.dim_aemet_stations (
+                        station_id, station_name, province, altitude, latitude, longitude
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (station_id) DO UPDATE SET
+                        station_name = EXCLUDED.station_name,
+                        province = EXCLUDED.province,
+                        altitude = EXCLUDED.altitude,
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    station,
+                )
 
             conn.commit()
             self.logger.info(
@@ -413,7 +405,7 @@ class DimensionalLoader(BaseETLLogger):
             raise
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
 
     def load_all_dimensional_tables(self, **context: Any) -> None:
         """

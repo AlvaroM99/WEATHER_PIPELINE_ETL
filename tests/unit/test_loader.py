@@ -549,10 +549,13 @@ def test_loader_logging(mock_connect, mock_get_minio_client, mock_db_connection,
 
 
 @pytest.mark.unit
+@patch("src.loader.return_db_connection")
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_connection_closed_on_success(mock_connect, mock_get_minio_client, mock_db_connection):
-    """Test database connection is closed after successful operation"""
+def test_connection_returned_to_pool_on_success(
+    mock_connect, mock_get_minio_client, mock_return_conn, mock_db_connection
+):
+    """Test database connection is returned to pool after successful operation"""
     mock_minio_instance = Mock()
     mock_minio_instance.read_parquet.side_effect = Exception("No file")
     mock_get_minio_client.return_value = mock_minio_instance
@@ -566,15 +569,18 @@ def test_connection_closed_on_success(mock_connect, mock_get_minio_client, mock_
 
     result = loader.load_fact_observation(ds="2026-01-29")
 
-    # Assert - connection close was called
-    mock_db_connection.close.assert_called()
+    # Assert - connection was returned to the pool
+    mock_return_conn.assert_called()
 
 
 @pytest.mark.unit
+@patch("src.loader.return_db_connection")
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_connection_closed_on_error(mock_connect, mock_get_minio_client, mock_db_connection):
-    """Test database connection is closed even on error"""
+def test_connection_returned_to_pool_on_error(
+    mock_connect, mock_get_minio_client, mock_return_conn, mock_db_connection
+):
+    """Test database connection is returned to pool even on error"""
     mock_minio_instance = Mock()
     mock_get_minio_client.return_value = mock_minio_instance
 
@@ -588,9 +594,6 @@ def test_connection_closed_on_error(mock_connect, mock_get_minio_client, mock_db
     with pytest.raises(Exception):
         conn = loader.get_db_connection()
         loader.get_city_id_mapping(conn)
-
-    # Assert - even on error, close should be attempted
-    # (Note: in real code, this would be in a finally block)
 
 
 # ===== Additional Loader Tests =====
