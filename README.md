@@ -6,7 +6,6 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![MinIO](https://img.shields.io/badge/MinIO-RELEASE.2024-c72c48?style=for-the-badge&logo=minio&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Pro-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Code Quality](https://img.shields.io/badge/Code%20Quality-Strict-green?style=for-the-badge)
 
 ## 📋 Executive Summary
 
@@ -21,40 +20,38 @@ The system integrates real-time and historical data from **OpenWeatherMap**, **O
 The project follows a strict **Medallion Architecture** ensuring data traceability, quality, and optimized storage formats.
 
 ```
-Docker Container (weather_pipeline_etl)
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│  ┌─────────────────┐                                                             │
-│  │     Fuentes     │                                                             │
-│  │ (APIs Externas) │                                                             │
-│  └────────┬────────┘                                                            
-            │                                                                     
-            ▼                                                                     
-   ┌─────────────────┐      ┌───────────────────────────────────────┐             
-   │  Apache Airflow │─────►│                 MinIO                 │
-   │  (Orquestación) │      │              (Data Lake)              │
-   └────────┬────────┘      │ ┌──────────────┐     ┌──────────────┐ │
-            │               │ │  Bronze Layer│ ──► │ Silver Layer │ │
-            │               │ │    (JSON)    │     │   (Parquet)  │ │
-            │               │ └──────────────┘     └──────┬───────┘ │
-            │               └─────────────────────────────┼─────────┘
-            │                                             │
-            │                                             ▼
-            │               ┌───────────────────────────────────────┐
-            └──────────────►│              PostgreSQL               │
-                            │              (Database)               │
-                            │ ┌──────────────┐     ┌──────────────┐ │
-                            │ │    Staging   │ ──► │     DWH      │ │
-                            │ │    Schema    │     │ (Gold Layer) │ │
-                            │ └──────────────┘     └──────┬───────┘ │
-                            └─────────────────────────────┼─────────┘
-                                                          │
-                                                          ▼
-                                                  ┌─────────────────┐
-                                                  │  Consumo / BI   │
-                                                  ├─────────────────┤
-                                                  │    pgAdmin      │
-                                                  │    Metabase     │
-                                                  └─────────────────┘
+Docker Container
+┌─────────────────────────────────────────────────────────────┐
+│                                                             |                                                                                                                                                                      
+┌────────────────────────────────────────────────────────────┐
+│                     DATA SOURCES                           │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
+│  │ OpenWeather  │   │  Open-Meteo  │   │    AEMET     │    │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘    │
+└─────────┼──────────────────┼──────────────────┼────────────┘
+          │                  │                  │
+          ▼                  ▼                  ▼
+┌────────────────────────────────────────────────────────────┐
+│                    BRONZE LAYER (MinIO)                    │
+│              Raw JSON - Immutable Landing Zone             │
+│  bronze-openweather/  bronze-openmeteo/  bronze-aemet/     │
+└─────────────────────────┬──────────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────────┐
+│                    SILVER LAYER (MinIO)                    │
+│           Cleaned Parquet - Standardized Schema            │
+│  silver-openweather/  silver-openmeteo/  silver-aemet/     │
+└─────────────────────────┬──────────────────────────────────┘
+                          │                                              
+                          ▼
+┌────────────────────────────────────────────────────────────┐
+│                 GOLD LAYER (PostgreSQL DWH)                │
+│              Star Schema - Analytics-Ready                 │
+│  dwh.fct_observation  dwh.fct_forecast_daily               │
+│  dwh.dim_city  dwh.dim_date  dwh.dim_weather_station       │
+└────────────────────────────────────────────────────────────┘
+
 ```
 
 ### 📋 Deep Dive: Implementation Details
@@ -275,7 +272,7 @@ WEATHER_PIPELINE_ETL/
 
 ---
 
-## �🚀 Development & CI/CD
+## 🚀 Development & CI/CD
 
 ### Testing Strategy (`Pytest`)
 -   **Unit Tests**: Isolated tests for transformation logic using mocked inputs.

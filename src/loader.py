@@ -391,6 +391,7 @@ class Loader(BaseETLLogger):
                     weather_code, et0_fao_evapotranspiration,
                     created_at
                 ) VALUES %s
+                ON CONFLICT (city_id, forecast_date_id, extraction_date_id) DO NOTHING
             """,
             mapper=self._map_daily_forecast,
             data_type="daily_forecast",
@@ -455,6 +456,7 @@ class Loader(BaseETLLogger):
                     wind_speed_10m, wind_direction_10m, wind_gusts_10m,
                     weather_code, created_at
                 ) VALUES %s
+                ON CONFLICT (city_id, forecast_datetime, extraction_date_id) DO NOTHING
             """,
             mapper=self._map_hourly_forecast,
             data_type="hourly_forecast",
@@ -515,6 +517,7 @@ class Loader(BaseETLLogger):
                     sulphur_dioxide, ozone, aerosol_optical_depth, dust,
                     created_at
                 ) VALUES %s
+                ON CONFLICT (city_id, measurement_datetime, extraction_date_id) DO NOTHING
             """,
             mapper=self._map_air_quality,
             data_type="air_quality",
@@ -569,6 +572,7 @@ class Loader(BaseETLLogger):
                     mugwort_pollen, olive_pollen, ragweed_pollen,
                     created_at
                 ) VALUES %s
+                ON CONFLICT (city_id, measurement_datetime, extraction_date_id) DO NOTHING
             """,
             mapper=self._map_pollen,
             data_type="pollen",
@@ -683,6 +687,7 @@ class Loader(BaseETLLogger):
                     wave_height_max, wave_direction_dominant, wave_period_max,
                     wind_wave_height_max, swell_wave_height_max, created_at
                 ) VALUES %s
+                ON CONFLICT (city_id, forecast_date_id, extraction_date_id) DO NOTHING
             """
 
             cur = conn.cursor()
@@ -943,6 +948,154 @@ class Loader(BaseETLLogger):
             if not conn.closed:
                 conn.close()
 
+    # Shared INSERT query for AEMET fact table
+    _AEMET_INSERT_QUERY = """
+        INSERT INTO dwh.fct_aemet_daily_weather (
+            station_id, date_id, extraction_date_id,
+            temp_avg, temp_min, temp_max,
+            precipitation, wind_speed_avg, wind_gust_max, wind_direction,
+            sunshine_hours, pressure_max, pressure_min,
+            humidity_avg, humidity_min, humidity_max,
+            created_at
+        ) VALUES %s
+        ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
+    """
+
+    def _ensure_station_map(
+        self, conn: Any
+    ) -> Tuple[Any, Dict[str, int]]:
+        """
+        Load station mapping, bootstrapping default stations if DB is empty.
+
+        If no stations exist in the database, loads defaults via DimensionalLoader
+        and reopens the connection.
+
+        Args:
+            conn: Active database connection
+
+        Returns:
+            Tuple of (connection, station_map) — connection may be replaced
+        """
+        station_map = self.get_station_id_mapping(conn)
+
+        if not station_map:
+            self.logger.warning(
+                "No AEMET stations found in DB. Loading default stations first..."
+            )
+            conn.close()
+            dim_loader = DimensionalLoader()
+            dim_loader.load_dim_aemet_stations()
+            conn = self.get_db_connection()
+            station_map = self.get_station_id_mapping(conn)
+            self.logger.info(f"After loading defaults: {len(station_map)} stations")
+
+        return conn, station_map
+
+    def _map_aemet_record(
+        self,
+        row: pd.Series,
+        station_db_id: int,
+        extraction_date_id: int,
+    ) -> RecordTuple:
+        """
+        Map a single AEMET DataFrame row to a record tuple.
+
+        Args:
+            row: DataFrame row with AEMET weather fields
+            station_db_id: Resolved database ID for the station
+            extraction_date_id: Date ID for the extraction run
+
+        Returns:
+            Tuple of 16 values matching the AEMET fact table schema
+        """
+        date_id = self.get_date_id(row.get("date"))
+        return (
+            station_db_id,
+            date_id,
+            extraction_date_id,
+            self.clean_value(row.get("temp_avg")),
+            self.clean_value(row.get("temp_min")),
+            self.clean_value(row.get("temp_max")),
+            self.clean_value(row.get("precipitation")),
+            self.clean_value(row.get("wind_speed_avg")),
+            self.clean_value(row.get("wind_gust_max")),
+            self.clean_value(row.get("wind_direction")),
+            self.clean_value(row.get("sunshine_hours")),
+            self.clean_value(row.get("pressure_max")),
+            self.clean_value(row.get("pressure_min")),
+            self.clean_value(row.get("humidity_avg")),
+            self.clean_value(row.get("humidity_min")),
+            self.clean_value(row.get("humidity_max")),
+        )
+
+    def _build_aemet_records(
+        self,
+        df: pd.DataFrame,
+        station_map: Dict[str, int],
+        extraction_date_id: int,
+    ) -> List[RecordTuple]:
+        """
+        Build AEMET record tuples from a DataFrame, with deduplication.
+
+        Deduplicates on (station_id, date), maps each row via _map_aemet_record,
+        and skips rows whose station_id is not in the station map.
+
+        Args:
+            df: DataFrame with AEMET weather data
+            station_map: Mapping of station indicativo → database ID
+            extraction_date_id: Date ID for the extraction run
+
+        Returns:
+            List of record tuples ready for insertion
+        """
+        if "station_id" in df.columns and "date" in df.columns:
+            initial_count = len(df)
+            df = df.drop_duplicates(subset=["station_id", "date"])
+            if len(df) < initial_count:
+                self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
+
+        records: List[RecordTuple] = []
+        skipped_stations: set = set()
+
+        for _, row in df.iterrows():
+            station_db_id = station_map.get(row.get("station_id"))
+            if not station_db_id:
+                skipped_stations.add(row.get("station_id"))
+                continue
+            records.append(self._map_aemet_record(row, station_db_id, extraction_date_id))
+
+        if skipped_stations:
+            self.logger.warning(
+                f"Skipped {len(skipped_stations)} unknown stations: {list(skipped_stations)[:5]}"
+            )
+
+        return records
+
+    def _insert_aemet_records(self, conn: Any, records: List[RecordTuple]) -> int:
+        """
+        Insert AEMET records into the fact table.
+
+        Appends a created_at timestamp to each record and performs a bulk insert
+        with ON CONFLICT DO NOTHING.
+
+        Args:
+            conn: Active database connection
+            records: List of record tuples (without created_at)
+
+        Returns:
+            Number of rows actually inserted
+        """
+        current_time = datetime.now()
+        records_with_time = [(*rec, current_time) for rec in records]
+
+        cur = conn.cursor()
+        execute_values(cur, self._AEMET_INSERT_QUERY, records_with_time)
+        conn.commit()
+
+        rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+        cur.close()
+        return rowcount
+
     def load_fact_aemet_daily(self, **context: Any) -> int:
         """
         Load AEMET daily climatology to dwh.fct_aemet_daily_weather.
@@ -957,29 +1110,16 @@ class Loader(BaseETLLogger):
         conn = self.get_db_connection()
 
         try:
-            station_map = self.get_station_id_mapping(conn)
-            self.logger.info(f"Station map loaded: {len(station_map)} stations")
-
-            # If no stations in DB, try to load them first
-            if not station_map:
-                self.logger.warning(
-                    "No AEMET stations found in DB. Loading default stations first..."
-                )
-                conn.close()
-                dim_loader = DimensionalLoader()
-                dim_loader.load_dim_aemet_stations()
-                # Reopen connection and get the station map
-                conn = self.get_db_connection()
-                station_map = self.get_station_id_mapping(conn)
-                self.logger.info(f"After loading defaults: {len(station_map)} stations")
+            conn, station_map = self._ensure_station_map(conn)
 
             if station_map:
+                self.logger.info(f"Station map loaded: {len(station_map)} stations")
                 self.logger.info(f"Sample station IDs in DB: {list(station_map.keys())[:5]}")
 
             execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
             extraction_date_id = self.get_date_id(execution_date) or 0
 
-            # Try climatology/daily path first
+            # Try climatology/daily path
             silver_path = f"climatology/daily/{execution_date}/"
             try:
                 objects = self.minio_client.client.list_objects(
@@ -1000,83 +1140,19 @@ class Loader(BaseETLLogger):
             df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
             self.logger.info(f"DataFrame loaded: {len(df)} rows, columns: {df.columns.tolist()}")
 
-            # Deduplicate
-            if "station_id" in df.columns and "date" in df.columns:
-                initial_count = len(df)
-                df.drop_duplicates(subset=["station_id", "date"], inplace=True)
-                if len(df) < initial_count:
-                    self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
-
-            # Log sample station IDs from parquet
             if "station_id" in df.columns:
                 unique_stations = df["station_id"].unique().tolist()
                 self.logger.info(f"Station IDs in parquet: {unique_stations[:5]}")
 
-            records = []
-            skipped_stations = set()
-            for _, row in df.iterrows():
-                station_db_id = station_map.get(row.get("station_id"))
-                if not station_db_id:
-                    skipped_stations.add(row.get("station_id"))
-                    continue
-
-                date_id = self.get_date_id(row.get("date"))
-
-                records.append(
-                    (
-                        station_db_id,
-                        date_id,
-                        extraction_date_id,
-                        self.clean_value(row.get("temp_avg")),
-                        self.clean_value(row.get("temp_min")),
-                        self.clean_value(row.get("temp_max")),
-                        self.clean_value(row.get("precipitation")),
-                        self.clean_value(row.get("wind_speed_avg")),
-                        self.clean_value(row.get("wind_gust_max")),
-                        self.clean_value(row.get("wind_direction")),
-                        self.clean_value(row.get("sunshine_hours")),
-                        self.clean_value(row.get("pressure_max")),
-                        self.clean_value(row.get("pressure_min")),
-                        self.clean_value(row.get("humidity_avg")),
-                        self.clean_value(row.get("humidity_min")),
-                        self.clean_value(row.get("humidity_max")),
-                    )
-                )
-
-            if skipped_stations:
-                self.logger.warning(
-                    f"Skipped {len(skipped_stations)} unknown stations: {list(skipped_stations)[:5]}"
-                )
+            records = self._build_aemet_records(df, station_map, extraction_date_id)
 
             if not records:
                 self.logger.warning("No valid records to insert (all stations unknown)")
                 return 0
 
             self.logger.info(f"Preparing to insert {len(records)} records")
-
-            # Add created_at timestamp
-            current_time = datetime.now()
-            records_with_time = [(*rec, current_time) for rec in records]
-
-            insert_query = """
-                INSERT INTO dwh.fct_aemet_daily_weather (
-                    station_id, date_id, extraction_date_id,
-                    temp_avg, temp_min, temp_max,
-                    precipitation, wind_speed_avg, wind_gust_max, wind_direction,
-                    sunshine_hours, pressure_max, pressure_min,
-                    humidity_avg, humidity_min, humidity_max,
-                    created_at
-                ) VALUES %s
-                ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
-            """
-
-            cur = conn.cursor()
-            execute_values(cur, insert_query, records_with_time)
-            conn.commit()
-
-            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+            rowcount = self._insert_aemet_records(conn, records)
             self.log_end(f"Inserted {rowcount} AEMET daily records")
-            cur.close()
             return rowcount
 
         except Exception as e:
@@ -1102,19 +1178,7 @@ class Loader(BaseETLLogger):
         conn = self.get_db_connection()
 
         try:
-            station_map = self.get_station_id_mapping(conn)
-
-            # If no stations in DB, try to load them first
-            if not station_map:
-                self.logger.warning(
-                    "No AEMET stations found in DB. Loading default stations first..."
-                )
-                conn.close()
-                dim_loader = DimensionalLoader()
-                dim_loader.load_dim_aemet_stations()
-                conn = self.get_db_connection()
-                station_map = self.get_station_id_mapping(conn)
-                self.logger.info(f"After loading defaults: {len(station_map)} stations")
+            conn, station_map = self._ensure_station_map(conn)
 
             execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
             extraction_date_id = self.get_date_id(execution_date) or 0
@@ -1142,61 +1206,10 @@ class Loader(BaseETLLogger):
             for parquet_file in parquet_files:
                 try:
                     df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, parquet_file)
-
-                    # Deduplicate
-                    if "station_id" in df.columns and "date" in df.columns:
-                        df.drop_duplicates(subset=["station_id", "date"], inplace=True)
-
-                    records = []
-                    for _, row in df.iterrows():
-                        station_db_id = station_map.get(row.get("station_id"))
-                        if not station_db_id:
-                            continue
-
-                        date_id = self.get_date_id(row.get("date"))
-
-                        records.append(
-                            (
-                                station_db_id,
-                                date_id,
-                                extraction_date_id,
-                                self.clean_value(row.get("temp_avg")),
-                                self.clean_value(row.get("temp_min")),
-                                self.clean_value(row.get("temp_max")),
-                                self.clean_value(row.get("precipitation")),
-                                self.clean_value(row.get("wind_speed_avg")),
-                                self.clean_value(row.get("wind_gust_max")),
-                                self.clean_value(row.get("wind_direction")),
-                                self.clean_value(row.get("sunshine_hours")),
-                                self.clean_value(row.get("pressure_max")),
-                                self.clean_value(row.get("pressure_min")),
-                                self.clean_value(row.get("humidity_avg")),
-                                self.clean_value(row.get("humidity_min")),
-                                self.clean_value(row.get("humidity_max")),
-                            )
-                        )
+                    records = self._build_aemet_records(df, station_map, extraction_date_id)
 
                     if records:
-                        current_time = datetime.now()
-                        records_with_time = [(*rec, current_time) for rec in records]
-
-                        insert_query = """
-                            INSERT INTO dwh.fct_aemet_daily_weather (
-                                station_id, date_id, extraction_date_id,
-                                temp_avg, temp_min, temp_max,
-                                precipitation, wind_speed_avg, wind_gust_max, wind_direction,
-                                sunshine_hours, pressure_max, pressure_min,
-                                humidity_avg, humidity_min, humidity_max,
-                                created_at
-                            ) VALUES %s
-                            ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
-                        """
-
-                        cur = conn.cursor()
-                        execute_values(cur, insert_query, records_with_time)
-                        conn.commit()
-                        total_inserted += cur.rowcount if cur.rowcount else 0
-                        cur.close()
+                        total_inserted += self._insert_aemet_records(conn, records)
 
                 except Exception as e:
                     self.log_error(f"Error loading {parquet_file}", e)

@@ -139,7 +139,96 @@ class Extractor(BaseETLLogger):
         return len(uploaded_objects)
 
     # ========================================================================
-    # Open-Meteo Daily Extraction
+    # Open-Meteo Generic Extraction
+    # ========================================================================
+
+    def _extract_openmeteo_generic(
+        self,
+        context: AirflowContext,
+        api_url: str,
+        param_key: str,
+        param_values: List[str],
+        path_prefix: str,
+        file_prefix: str,
+        xcom_key: str,
+        log_label: str,
+    ) -> int:
+        """
+        Generic extraction logic for all Open-Meteo endpoints.
+
+        Iterates over all capital cities, fetches data from the specified
+        Open-Meteo API endpoint, and uploads raw JSON to the bronze layer.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+            api_url: Open-Meteo API endpoint URL
+            param_key: API parameter key for data fields ('daily' or 'hourly')
+            param_values: List of field names to request from the API
+            path_prefix: MinIO object path prefix (e.g. 'forecast/daily')
+            file_prefix: Filename prefix (e.g. 'weather_daily')
+            xcom_key: XCom key for pushing uploaded objects metadata
+            log_label: Human-readable label for log messages
+
+        Returns:
+            Number of successfully uploaded files
+        """
+        self.log_start(f"Open-Meteo {log_label} extraction")
+
+        capitals_df: pd.DataFrame = get_capitals_dataframe()
+        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        uploaded_objects: List[UploadedObject] = []
+
+        for _, city in capitals_df.iterrows():
+            params: Dict[str, Any] = {
+                "latitude": city["latitude"],
+                "longitude": city["longitude"],
+                param_key: ",".join(param_values),
+                "timezone": DEFAULT_TIMEZONE,
+            }
+            if OPENMETEO_API_KEY:
+                params["apikey"] = OPENMETEO_API_KEY
+
+            try:
+                self.logger.info(f"Fetching {log_label} for {city['municipio_nombre']}")
+                response: requests.Response = self.session.get(
+                    api_url, params=params, verify=False, timeout=60
+                )
+                response.raise_for_status()
+                data: Dict[str, Any] = response.json()
+
+                data["city_code"] = city["city_code"]
+                data["municipio_nombre"] = city["municipio_nombre"]
+                data["_metadata"] = {
+                    "extraction_timestamp": timestamp,
+                    "execution_date": execution_date,
+                }
+
+                object_path: str = (
+                    f"{path_prefix}/{execution_date}"
+                    f"/{file_prefix}_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                )
+                self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
+
+                uploaded_objects.append(
+                    {"object_path": object_path, "city": city["municipio_nombre"]}
+                )
+                self.logger.info(f"✅ Stored {log_label} for {city['municipio_nombre']}")
+                time.sleep(0.1)
+
+            except Exception as e:
+                self.log_error(
+                    f"Error fetching {log_label} for {city['municipio_nombre']}", e
+                )
+                continue
+
+        self.log_end(f"Stored {len(uploaded_objects)} {log_label} files")
+        if context.get("task_instance"):
+            context["task_instance"].xcom_push(key=xcom_key, value=uploaded_objects)
+        return len(uploaded_objects)
+
+    # ========================================================================
+    # Open-Meteo Extraction Methods (delegates to _extract_openmeteo_generic)
     # ========================================================================
 
     def extract_openmeteo_daily(self, **context: Any) -> int:
@@ -152,66 +241,16 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-        self.log_start("Open-Meteo DAILY forecast extraction")
-
-        capitals_df: pd.DataFrame = get_capitals_dataframe()
-        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uploaded_objects: List[UploadedObject] = []
-
-        for _, city in capitals_df.iterrows():
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                "daily": ",".join(DAILY_FORECAST_PARAMS),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
-
-            try:
-                self.logger.info(f"Fetching DAILY forecast for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    OPENMETEO_FORECAST_URL, params=params, verify=False, timeout=60
-                )
-                response.raise_for_status()
-                data: Dict[str, Any] = response.json()
-
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
-
-                object_path: str = (
-                    f"forecast/daily/{execution_date}/weather_daily_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                file_size: int = self.minio_client.upload_json(
-                    BRONZE_OPENMETEO_BUCKET, object_path, data
-                )
-
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                self.logger.info(f"✅ Stored DAILY forecast for {city['municipio_nombre']}")
-                time.sleep(0.1)
-
-            except Exception as e:
-                self.log_error(f"Error fetching DAILY forecast for {city['municipio_nombre']}", e)
-                continue
-
-        self.log_end(f"Stored {len(uploaded_objects)} DAILY forecast files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(
-                key="openmeteo_daily_objects", value=uploaded_objects
-            )
-            context["task_instance"].xcom_push(key="execution_date", value=execution_date)
-        return len(uploaded_objects)
-
-    # ========================================================================
-    # Open-Meteo Hourly Extraction
-    # ========================================================================
+        return self._extract_openmeteo_generic(
+            context=context,
+            api_url=OPENMETEO_FORECAST_URL,
+            param_key="daily",
+            param_values=DAILY_FORECAST_PARAMS,
+            path_prefix="forecast/daily",
+            file_prefix="weather_daily",
+            xcom_key="openmeteo_daily_objects",
+            log_label="DAILY forecast",
+        )
 
     def extract_openmeteo_hourly(self, **context: Any) -> int:
         """
@@ -223,65 +262,16 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-        self.log_start("Open-Meteo HOURLY forecast extraction")
-
-        capitals_df: pd.DataFrame = get_capitals_dataframe()
-        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uploaded_objects: List[UploadedObject] = []
-
-        for _, city in capitals_df.iterrows():
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                "hourly": ",".join(HOURLY_FORECAST_PARAMS),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
-
-            try:
-                self.logger.info(f"Fetching HOURLY forecast for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    OPENMETEO_FORECAST_URL, params=params, verify=False, timeout=60
-                )
-                response.raise_for_status()
-                data: Dict[str, Any] = response.json()
-
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
-
-                object_path: str = (
-                    f"forecast/hourly/{execution_date}/weather_hourly_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                file_size: int = self.minio_client.upload_json(
-                    BRONZE_OPENMETEO_BUCKET, object_path, data
-                )
-
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                self.logger.info(f"✅ Stored HOURLY forecast for {city['municipio_nombre']}")
-                time.sleep(0.1)
-
-            except Exception as e:
-                self.log_error(f"Error fetching HOURLY forecast for {city['municipio_nombre']}", e)
-                continue
-
-        self.log_end(f"Stored {len(uploaded_objects)} HOURLY forecast files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(
-                key="openmeteo_hourly_objects", value=uploaded_objects
-            )
-        return len(uploaded_objects)
-
-    # ========================================================================
-    # Open-Meteo Air Quality Extraction
-    # ========================================================================
+        return self._extract_openmeteo_generic(
+            context=context,
+            api_url=OPENMETEO_FORECAST_URL,
+            param_key="hourly",
+            param_values=HOURLY_FORECAST_PARAMS,
+            path_prefix="forecast/hourly",
+            file_prefix="weather_hourly",
+            xcom_key="openmeteo_hourly_objects",
+            log_label="HOURLY forecast",
+        )
 
     def extract_openmeteo_air_quality(self, **context: Any) -> int:
         """
@@ -293,62 +283,16 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-        self.log_start("Open-Meteo AIR QUALITY extraction")
-
-        capitals_df: pd.DataFrame = get_capitals_dataframe()
-        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uploaded_objects: List[UploadedObject] = []
-
-        for _, city in capitals_df.iterrows():
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                "hourly": ",".join(AIR_QUALITY_PARAMS),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
-
-            try:
-                self.logger.info(f"Fetching AIR QUALITY for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    OPENMETEO_AIR_QUALITY_URL, params=params, verify=False, timeout=60
-                )
-                if response.status_code != 200:
-                    continue
-
-                data: Dict[str, Any] = response.json()
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
-
-                object_path: str = (
-                    f"air_quality/{execution_date}/air_quality_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                time.sleep(0.1)
-
-            except Exception as e:
-                self.log_error(f"Error fetching AIR QUALITY for {city['municipio_nombre']}", e)
-                continue
-
-        self.log_end(f"Stored {len(uploaded_objects)} AIR QUALITY files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(
-                key="openmeteo_air_quality_objects", value=uploaded_objects
-            )
-        return len(uploaded_objects)
-
-    # ========================================================================
-    # Open-Meteo Pollen Extraction
-    # ========================================================================
+        return self._extract_openmeteo_generic(
+            context=context,
+            api_url=OPENMETEO_AIR_QUALITY_URL,
+            param_key="hourly",
+            param_values=AIR_QUALITY_PARAMS,
+            path_prefix="air_quality",
+            file_prefix="air_quality",
+            xcom_key="openmeteo_air_quality_objects",
+            log_label="AIR QUALITY",
+        )
 
     def extract_openmeteo_pollen(self, **context: Any) -> int:
         """
@@ -360,62 +304,16 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-        self.log_start("Open-Meteo POLLEN extraction")
-
-        capitals_df: pd.DataFrame = get_capitals_dataframe()
-        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uploaded_objects: List[UploadedObject] = []
-
-        for _, city in capitals_df.iterrows():
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                "hourly": ",".join(POLLEN_PARAMS),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
-
-            try:
-                self.logger.info(f"Fetching POLLEN for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    OPENMETEO_POLLEN_URL, params=params, verify=False, timeout=60
-                )
-                if response.status_code != 200:
-                    continue
-
-                data: Dict[str, Any] = response.json()
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
-
-                object_path: str = (
-                    f"pollen/{execution_date}/pollen_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                time.sleep(0.1)
-
-            except Exception as e:
-                self.log_error(f"Error fetching POLLEN for {city['municipio_nombre']}", e)
-                continue
-
-        self.log_end(f"Stored {len(uploaded_objects)} POLLEN files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(
-                key="openmeteo_pollen_objects", value=uploaded_objects
-            )
-        return len(uploaded_objects)
-
-    # ========================================================================
-    # Open-Meteo Marine Extraction
-    # ========================================================================
+        return self._extract_openmeteo_generic(
+            context=context,
+            api_url=OPENMETEO_POLLEN_URL,
+            param_key="hourly",
+            param_values=POLLEN_PARAMS,
+            path_prefix="pollen",
+            file_prefix="pollen",
+            xcom_key="openmeteo_pollen_objects",
+            log_label="POLLEN",
+        )
 
     def extract_openmeteo_marine(self, **context: Any) -> int:
         """
@@ -427,59 +325,16 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-        self.log_start("Open-Meteo MARINE extraction")
-
-        capitals_df: pd.DataFrame = get_capitals_dataframe()
-        execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uploaded_objects: List[UploadedObject] = []
-
-        for _, city in capitals_df.iterrows():
-            # Only coastal cities logic could be added here
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                "daily": ",".join(MARINE_PARAMS),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
-
-            try:
-                self.logger.info(f"Fetching MARINE for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    OPENMETEO_MARINE_URL, params=params, verify=False, timeout=60
-                )
-                if response.status_code != 200:
-                    continue
-
-                data: Dict[str, Any] = response.json()
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
-
-                object_path: str = (
-                    f"marine/{execution_date}/marine_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                time.sleep(0.1)
-
-            except Exception as e:
-                self.log_error(f"Error fetching MARINE for {city['municipio_nombre']}", e)
-                continue
-
-        self.log_end(f"Stored {len(uploaded_objects)} MARINE files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(
-                key="openmeteo_marine_objects", value=uploaded_objects
-            )
-        return len(uploaded_objects)
+        return self._extract_openmeteo_generic(
+            context=context,
+            api_url=OPENMETEO_MARINE_URL,
+            param_key="daily",
+            param_values=MARINE_PARAMS,
+            path_prefix="marine",
+            file_prefix="marine",
+            xcom_key="openmeteo_marine_objects",
+            log_label="MARINE",
+        )
 
     # ========================================================================
     # AEMET Extraction Methods
