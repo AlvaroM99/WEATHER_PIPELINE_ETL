@@ -15,20 +15,17 @@ import psycopg2
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.config.database_config import (
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_USER,
-)
+from src.config.database_config import get_postgres_config
 from src.dimensional_loader import DimensionalLoader
 
 logger = logging.getLogger(__name__)
 
 
 def get_db_connection():
+    cfg = get_postgres_config()
     return psycopg2.connect(
-        host=POSTGRES_HOST, database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD
+        host=cfg["host"], port=cfg["port"], database=cfg["database"],
+        user=cfg["user"], password=cfg["password"],
     )
 
 
