@@ -91,54 +91,103 @@ class Extractor(BaseETLLogger):
         timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
         uploaded_objects: List[UploadedObject] = []
 
-        for city in cities:
-            try:
-                url: str = "https://api.openweathermap.org/data/2.5/weather"
-                params: Dict[str, Any] = {
-                    "lat": city["lat"],
-                    "lon": city["lon"],
-                    "appid": get_openweather_api_key(),
-                    "units": "metric",
-                }
+        # Import connection utilities for lake_metadata logging
+        from src.config.db_pool import get_db_connection, return_db_connection
 
-                self.logger.info(f"Fetching weather data for {city['name']}")
-                response: requests.Response = self.session.get(url, params=params, timeout=10)
-                response.raise_for_status()
-                raw_data: Dict[str, Any] = response.json()
+        conn = get_db_connection()
+        try:
+            for city in cities:
+                try:
+                    url: str = "https://api.openweathermap.org/data/2.5/weather"
+                    params: Dict[str, Any] = {
+                        "lat": city["lat"],
+                        "lon": city["lon"],
+                        "appid": get_openweather_api_key(),
+                        "units": "metric",
+                    }
 
-                raw_data["_metadata"] = {
-                    "city_name": city["name"],
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
-                }
+                    self.logger.info(f"Fetching weather data for {city['name']}")
+                    response: requests.Response = self.session.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    raw_data: Dict[str, Any] = response.json()
 
-                object_path: str = BRONZE_PATH_TEMPLATE.format(
-                    date=execution_date, city=city["name"].lower(), timestamp=timestamp
-                )
+                    raw_data["_metadata"] = {
+                        "city_name": city["name"],
+                        "extraction_timestamp": timestamp,
+                        "execution_date": execution_date,
+                    }
 
-                file_size: int = self.minio_client.upload_json(BRONZE_BUCKET, object_path, raw_data)
+                    object_path: str = BRONZE_PATH_TEMPLATE.format(
+                        date=execution_date, city=city["name"].lower(), timestamp=timestamp
+                    )
 
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["name"], "file_size": file_size}
-                )
-                self.logger.info(f"✅ Stored raw data for {city['name']}")
+                    file_size: int = self.minio_client.upload_json(BRONZE_BUCKET, object_path, raw_data)
 
-            except Exception as e:
-                self.log_error(f"Error processing {city['name']}", e)
-                continue
+                    # Log to lake_metadata for data lineage
+                    self.log_to_lake_metadata(
+                        bucket_name=BRONZE_BUCKET,
+                        object_path=object_path,
+                        layer="bronze",
+                        data_source="openweather",
+                        record_count=1,  # One weather observation per file
+                        file_size_bytes=file_size,
+                        conn=conn,
+                        status="success",
+                    )
 
-        self.log_end(f"Stored {len(uploaded_objects)} OpenWeather files")
+                    uploaded_objects.append(
+                        {"object_path": object_path, "city": city["name"], "file_size": file_size}
+                    )
+                    self.logger.info(f"✅ Stored raw data for {city['name']}")
 
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(key="bronze_objects", value=uploaded_objects)
-            context["task_instance"].xcom_push(key="execution_date", value=execution_date)
+                except Exception as e:
+                    self.log_error(f"Error processing {city['name']}", e)
+                    continue
 
-        return len(uploaded_objects)
+            self.log_end(f"Stored {len(uploaded_objects)} OpenWeather files")
+
+            if context.get("task_instance"):
+                context["task_instance"].xcom_push(key="bronze_objects", value=uploaded_objects)
+                context["task_instance"].xcom_push(key="execution_date", value=execution_date)
+
+            return len(uploaded_objects)
+        finally:
+            return_db_connection(conn)
 
     # ========================================================================
     # Open-Meteo Generic Extraction
     # ========================================================================
 
+    def _extract_openmeteo_generic(
+        self,
+        context: AirflowContext,
+        api_url: str,
+        param_key: str,
+        param_values: List[str],
+        path_prefix: str,
+        file_prefix: str,
+        xcom_key: str,
+        log_label: str,
+    ) -> int:
+        """
+        Generic extraction logic for all Open-Meteo endpoints.
+
+        Iterates over all capital cities, fetches data from the specified
+        Open-Meteo API endpoint, and uploads raw JSON to the bronze layer.
+
+        Args:
+            context: Airflow context containing execution date and task instance
+            api_url: Open-Meteo API endpoint URL
+            param_key: API parameter key for data fields ('daily' or 'hourly')
+            param_values: List of field names to request from the API
+            path_prefix: MinIO object path prefix (e.g. 'forecast/daily')
+            file_prefix: Filename prefix (e.g. 'weather_daily')
+            xcom_key: XCom key for pushing uploaded objects metadata
+            log_label: Human-readable label for log messages
+
+        Returns:
+            Number of successfully uploaded files
+        """
     def _extract_openmeteo_generic(
         self,
         context: AirflowContext,
@@ -176,54 +225,73 @@ class Extractor(BaseETLLogger):
         timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
         uploaded_objects: List[UploadedObject] = []
 
-        for _, city in capitals_df.iterrows():
-            params: Dict[str, Any] = {
-                "latitude": city["latitude"],
-                "longitude": city["longitude"],
-                param_key: ",".join(param_values),
-                "timezone": DEFAULT_TIMEZONE,
-            }
-            openmeteo_key = get_openmeteo_api_key()
-            if openmeteo_key:
-                params["apikey"] = openmeteo_key
+        # Import connection utilities for lake_metadata logging
+        from src.config.db_pool import get_db_connection, return_db_connection
 
-            try:
-                self.logger.info(f"Fetching {log_label} for {city['municipio_nombre']}")
-                response: requests.Response = self.session.get(
-                    api_url, params=params, timeout=60
-                )
-                response.raise_for_status()
-                data: Dict[str, Any] = response.json()
-
-                data["city_code"] = city["city_code"]
-                data["municipio_nombre"] = city["municipio_nombre"]
-                data["_metadata"] = {
-                    "extraction_timestamp": timestamp,
-                    "execution_date": execution_date,
+        conn = get_db_connection()
+        try:
+            for _, city in capitals_df.iterrows():
+                params: Dict[str, Any] = {
+                    "latitude": city["latitude"],
+                    "longitude": city["longitude"],
+                    param_key: ",".join(param_values),
+                    "timezone": DEFAULT_TIMEZONE,
                 }
+                openmeteo_key = get_openmeteo_api_key()
+                if openmeteo_key:
+                    params["apikey"] = openmeteo_key
 
-                object_path: str = (
-                    f"{path_prefix}/{execution_date}"
-                    f"/{file_prefix}_{city['municipio_nombre'].lower()}_{timestamp}.json"
-                )
-                self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
+                try:
+                    self.logger.info(f"Fetching {log_label} for {city['municipio_nombre']}")
+                    response: requests.Response = self.session.get(
+                        api_url, params=params, timeout=60
+                    )
+                    response.raise_for_status()
+                    data: Dict[str, Any] = response.json()
 
-                uploaded_objects.append(
-                    {"object_path": object_path, "city": city["municipio_nombre"]}
-                )
-                self.logger.info(f"✅ Stored {log_label} for {city['municipio_nombre']}")
-                time.sleep(0.1)
+                    data["city_code"] = city["city_code"]
+                    data["municipio_nombre"] = city["municipio_nombre"]
+                    data["_metadata"] = {
+                        "extraction_timestamp": timestamp,
+                        "execution_date": execution_date,
+                    }
 
-            except Exception as e:
-                self.log_error(
-                    f"Error fetching {log_label} for {city['municipio_nombre']}", e
-                )
-                continue
+                    object_path: str = (
+                        f"{path_prefix}/{execution_date}"
+                        f"/{file_prefix}_{city['municipio_nombre'].lower()}_{timestamp}.json"
+                    )
+                    file_size: int = self.minio_client.upload_json(BRONZE_OPENMETEO_BUCKET, object_path, data)
 
-        self.log_end(f"Stored {len(uploaded_objects)} {log_label} files")
-        if context.get("task_instance"):
-            context["task_instance"].xcom_push(key=xcom_key, value=uploaded_objects)
-        return len(uploaded_objects)
+                    # Log to lake_metadata for data lineage
+                    self.log_to_lake_metadata(
+                        bucket_name=BRONZE_OPENMETEO_BUCKET,
+                        object_path=object_path,
+                        layer="bronze",
+                        data_source="openmeteo",
+                        record_count=1,  # One city's data per file
+                        file_size_bytes=file_size,
+                        conn=conn,
+                        status="success",
+                    )
+
+                    uploaded_objects.append(
+                        {"object_path": object_path, "city": city["municipio_nombre"], "file_size": file_size}
+                    )
+                    self.logger.info(f"✅ Stored {log_label} for {city['municipio_nombre']}")
+                    time.sleep(0.1)
+
+                except Exception as e:
+                    self.log_error(
+                        f"Error fetching {log_label} for {city['municipio_nombre']}", e
+                    )
+                    continue
+
+            self.log_end(f"Stored {len(uploaded_objects)} {log_label} files")
+            if context.get("task_instance"):
+                context["task_instance"].xcom_push(key=xcom_key, value=uploaded_objects)
+            return len(uploaded_objects)
+        finally:
+            return_db_connection(conn)
 
     # ========================================================================
     # Open-Meteo Extraction Methods (delegates to _extract_openmeteo_generic)
