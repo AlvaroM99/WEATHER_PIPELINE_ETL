@@ -206,8 +206,6 @@ class Loader(BaseLoader):
             Tuple of (name_map, code_map) dictionaries
         """
         cur: psycopg2.extensions.cursor = conn.cursor()
-        cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
-        # Also map city_name for OpenWeather which uses names
         cur.execute("SELECT city_name, city_id FROM dwh.dim_city")
         name_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
 
@@ -1052,8 +1050,6 @@ class Loader(BaseLoader):
 
         cur = conn.cursor()
         execute_values(cur, self._AEMET_INSERT_QUERY, records_with_time)
-        conn.commit()
-
         rowcount: int = cur.rowcount if cur.rowcount is not None else 0
         cur.close()
         return rowcount
