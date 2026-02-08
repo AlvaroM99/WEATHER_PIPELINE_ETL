@@ -13,8 +13,24 @@ from src.extractor import Extractor
 
 
 def run_extraction(method_name, **context):
+    """Execute a specific extraction method via explicit dispatch."""
     extractor = Extractor()
-    method = getattr(extractor, method_name)
+    methods = {
+        "extract_openweather": extractor.extract_openweather,
+        "extract_openmeteo_daily": extractor.extract_openmeteo_daily,
+        "extract_openmeteo_hourly": extractor.extract_openmeteo_hourly,
+        "extract_openmeteo_air_quality": extractor.extract_openmeteo_air_quality,
+        "extract_openmeteo_pollen": extractor.extract_openmeteo_pollen,
+        "extract_openmeteo_marine": extractor.extract_openmeteo_marine,
+        "extract_aemet_stations": extractor.extract_aemet_stations,
+        "extract_aemet_daily_climatology": extractor.extract_aemet_daily_climatology,
+    }
+    method = methods.get(method_name)
+    if method is None:
+        raise ValueError(
+            f"Unknown extraction method: '{method_name}'. "
+            f"Valid methods: {list(methods)}"
+        )
     return method(**context)
 
 
@@ -43,42 +59,36 @@ with DAG(
         task_id="extract_openweather",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openweather"},
-
     )
 
     extract_om_daily = PythonOperator(
         task_id="extract_openmeteo_daily",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_daily"},
-
     )
 
     extract_om_hourly = PythonOperator(
         task_id="extract_openmeteo_hourly",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_hourly"},
-
     )
 
     extract_om_air_quality = PythonOperator(
         task_id="extract_openmeteo_air_quality",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_air_quality"},
-
     )
 
     extract_om_pollen = PythonOperator(
         task_id="extract_openmeteo_pollen",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_pollen"},
-
     )
 
     extract_om_marine = PythonOperator(
         task_id="extract_openmeteo_marine",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_openmeteo_marine"},
-
     )
 
     # AEMET Extraction Tasks
@@ -86,14 +96,12 @@ with DAG(
         task_id="extract_aemet_stations",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_stations"},
-
     )
 
     extract_aemet_daily = PythonOperator(
         task_id="extract_aemet_daily_climatology",
         python_callable=run_extraction,
         op_kwargs={"method_name": "extract_aemet_daily_climatology"},
-
     )
 
     end = EmptyOperator(task_id="extraction_complete")

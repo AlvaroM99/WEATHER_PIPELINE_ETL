@@ -62,14 +62,12 @@ The Data Lake is the backbone of our storage strategy.
 -   **Implementation**: The `MinIOClient` (Singleton) ensures these buckets exist on startup (`_ensure_buckets` method), preventing "Bucket Not Found" runtime errors.
 -   **Path Structure**: `source/date/file_timestamp.ext` ensures that consecutive runs never overwrite previous data, providing full history.
 
-#### 2. The Staging Layer (PostgreSQL Schema)
-A dedicated `staging` schema acts as a quality gate before data enters the production Warehouses.
--   **Mirror Tables**: The `init-staging-tables.sql` script creates tables identical to the Fact tables but removes Foreign Key constraints. This allows high-speed bulk inserts (`COPY` or batch inserts) without referential integrity checks slowing down the process.
--   **Validation Log**: A persistent `validation_log` table allows full auditability of failed batches.
--   **Quality Columns**:
-    -   `_is_duplicate`: Boolean flag checking against existing production keys.
-    -   `_null_count`: Integer tracking critical missing values.
--   **Logic**: The `Loader` class inserts into Staging first. Then, SQL-based validation procedures run. Only records passing the "Quality Gate" are moved to `DWH`.
+#### 2. Data Quality Gate (Application Layer)
+Data quality validation runs at the application level before records reach the DWH.
+-   **Pandas-Based Validators**: The `DataQualityValidator` class (`src/data_quality/validators.py`) performs schema validation, range checks, completeness metrics, and uniqueness verification on DataFrames before insertion.
+-   **Expectation Suites**: Pre-configured validation rules per data type (`expectations.py`) define meteorologically valid ranges (e.g., temperature between -60 and 60 C, pressure between 870 and 1084 hPa).
+-   **Strict vs Warn Modes**: A `strict_mode` flag controls whether validation failures raise exceptions or only log warnings, allowing flexible behavior per environment.
+-   **Idempotent Loading**: All fact table inserts use `ON CONFLICT DO NOTHING`, preventing duplicate records without requiring a separate staging schema.
 
 #### 3. API Integration Engine
 -   **Heterogeneous Sources**: Unified interface for 3 distinct APIs with different auth mechanisms (API Key, JWT, Free-tier).
@@ -116,7 +114,7 @@ We don't just move data; we ensure it's correct.
 
 ### Observability
 -   **Metabase**: Connected directly to the `Gold` layer for building dashboards (Weather Forecasts, Historical Trends).
--   **Structured Logging**: Custom JSON-formatted logs with emoji indicators (🚀, ✅, ❌) for instant visual parsing in CloudWatch or Airflow Logs.
+-   **Structured Logging**: Custom `BaseETLLogger` mixin with emoji indicators (🚀, ✅, ❌) for instant visual parsing in Airflow Logs.
 
 ---
 
@@ -140,7 +138,7 @@ The `SecretsManager` acts as an Adapter, providing a unified `get_credentials()`
 The project maintains a spotless codebase using a pre-commit pipeline:
 -   **Black**: Uncompromising formatting.
 -   **Ruff**: Lightning-fast linting.
--   **Mypy**: Static type checking (Strict mode enabled).
+-   **Mypy**: Static type checking (gradual adoption with `disallow_untyped_defs`).
 -   **Bandit**: Security analysis.
 
 ### Makefile
@@ -252,7 +250,7 @@ WEATHER_PIPELINE_ETL/
 │   └── ...
 ├── docker/                     # Container Configurations
 │   ├── airflow/
-│   ├── postgres/               # SQL Init Scripts (Staging/DWH)
+│   ├── postgres/               # SQL Init Scripts (DWH)
 │   └── metabase/
 ├── src/                        # Application Source Code
 │   ├── config/                 # Configuration & Adapters

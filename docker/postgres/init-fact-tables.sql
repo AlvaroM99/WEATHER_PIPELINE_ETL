@@ -15,7 +15,11 @@
 -- ============================================================================
 
 -- FCT_WEATHER_OBSERVATION - Current Weather Observations (OpenWeather)
--- Partitioned by date_id (observation date ≈ extraction date)
+-- Partitioned by date_id instead of extraction_date_id because OpenWeather
+-- returns a single current-moment snapshot per API call (not a forecast range).
+-- The observation date always matches the extraction date, so a separate
+-- extraction_date_id column would be redundant. This simplifies the PK and
+-- keeps partition pruning efficient for time-range queries.
 CREATE TABLE IF NOT EXISTS dwh.fct_weather_observation (
     city_id INTEGER REFERENCES dwh.dim_city(city_id),
     date_id INTEGER NOT NULL,
