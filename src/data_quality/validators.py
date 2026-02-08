@@ -332,9 +332,9 @@ class DataQualityValidator:
                         {
                             "expectation_type": "expect_column_values_to_not_be_null",
                             "column": col,
-                            "unexpected_count": null_count,
-                            "unexpected_percent": (1.0 - completeness) * 100,
-                            "kwargs": {"mostly": completeness_threshold},
+                            "unexpected_count": int(null_count),
+                            "unexpected_percent": float((1.0 - completeness) * 100),
+                            "kwargs": {"mostly": float(completeness_threshold)},
                         }
                     )
 

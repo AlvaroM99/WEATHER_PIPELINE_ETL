@@ -18,7 +18,7 @@ class DataQualityException(Exception):
         self.validation_results = validation_results or {}
         super().__init__(self.message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.validation_results:
             failed_expectations = self.validation_results.get("failed_expectations", [])
             return f"{self.message} - Failed expectations: {failed_expectations}"
@@ -37,7 +37,7 @@ class ValidationError(DataQualityException):
         self.type_errors = type_errors or []
         super().__init__(message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         details = []
         if self.missing_columns:
             details.append(f"Missing columns: {self.missing_columns}")
@@ -66,7 +66,7 @@ class CompletenessError(DataQualityException):
         self.threshold = threshold
         super().__init__(message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.completeness_score is not None and self.threshold is not None:
             return f"{self.message} - Score: {self.completeness_score:.2%}, Threshold: {self.threshold:.2%}"
         return self.message

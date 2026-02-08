@@ -268,29 +268,38 @@ def mock_minio_client():
     mock.read_json.return_value = {}
     mock.read_parquet.return_value = pd.DataFrame()
 
-    # Mock list_objects to return empty list by default
+    # Mock list_objects to return iterable (not subscriptable)
     mock_obj = Mock()
     mock_obj.object_name = "test.json"
-    mock.client.list_objects.return_value = []
+    mock_obj.size = 1024
+    # Return iterator instead of list to avoid subscriptable errors
+    mock.client.list_objects.return_value = iter([mock_obj])
+    mock.list_objects.return_value = iter([mock_obj])
 
     return mock
 
 
 @pytest.fixture
 def mock_db_connection():
-    """Mock PostgreSQL database connection"""
+    """Mock PostgreSQL database connection with UTF-8 encoding."""
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_cursor.rowcount = 1
-    mock_cursor.fetchall.return_value = [("Madrid", 1), ("Barcelona", 2)]
-
-    # Make cursor() return the mock cursor
+    mock_cursor.fetchall.return_value = [(("Madrid", 1), ("Barcelona", 2))]
+    mock_cursor.fetchone.return_value = (1,)
+    
+    # Add UTF-8 encoding to prevent Unicode decode errors
+    mock_conn.encoding = 'UTF8'
+    
+    # Make cursor() return the mock cursor with context manager support
     mock_conn.cursor.return_value = mock_cursor
-
-    # Support context manager
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.__exit__.return_value = None
+    
+    # Support connection context manager
     mock_conn.__enter__.return_value = mock_conn
     mock_conn.__exit__.return_value = None
-
+    
     return mock_conn
 
 
