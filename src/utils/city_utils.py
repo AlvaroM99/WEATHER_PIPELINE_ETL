@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 from io import StringIO
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pandas as pd
 
