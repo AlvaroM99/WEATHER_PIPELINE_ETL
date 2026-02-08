@@ -305,12 +305,12 @@ class DataQualityValidator:
                         {
                             "expectation_type": "expect_column_values_to_be_between",
                             "column": col,
-                            "unexpected_count": invalid_count,
-                            "unexpected_percent": (1.0 - compliance) * 100,
+                            "unexpected_count": int(invalid_count),
+                            "unexpected_percent": float((1.0 - compliance) * 100),
                             "kwargs": {
-                                "min_value": min_val,
-                                "max_value": max_val,
-                                "mostly": mostly,
+                                "min_value": float(min_val),
+                                "max_value": float(max_val),
+                                "mostly": float(mostly),
                             },
                         }
                     )

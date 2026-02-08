@@ -225,10 +225,10 @@ class SecretsManager:
             conn = _get_airflow_connection(self.CONN_OPENWEATHER)
             if conn:
                 if conn.password:
-                    return conn.password
+                    return str(conn.password)
                 extra = conn.extra_dejson if conn.extra else {}
                 if extra.get("api_key"):
-                    return extra["api_key"]
+                    return str(extra["api_key"])
             logger.warning(
                 f"Airflow connection '{self.CONN_OPENWEATHER}' not found, "
                 "falling back to environment variables"
@@ -250,10 +250,10 @@ class SecretsManager:
             conn = _get_airflow_connection(self.CONN_AEMET)
             if conn:
                 if conn.password:
-                    return conn.password
+                    return str(conn.password)
                 extra = conn.extra_dejson if conn.extra else {}
                 if extra.get("api_key"):
-                    return extra["api_key"]
+                    return str(extra["api_key"])
             logger.warning(
                 f"Airflow connection '{self.CONN_AEMET}' not found, "
                 "falling back to environment variables"
@@ -275,10 +275,10 @@ class SecretsManager:
             conn = _get_airflow_connection(self.CONN_OPENMETEO)
             if conn:
                 if conn.password:
-                    return conn.password
+                    return str(conn.password)
                 extra = conn.extra_dejson if conn.extra else {}
                 if extra.get("api_key"):
-                    return extra["api_key"]
+                    return str(extra["api_key"])
 
         return os.getenv("OPENMETEO_API_KEY")
 
@@ -296,10 +296,10 @@ class SecretsManager:
             conn = _get_airflow_connection(self.CONN_GITHUB)
             if conn:
                 if conn.password:
-                    return conn.password
+                    return str(conn.password)
                 extra = conn.extra_dejson if conn.extra else {}
                 if extra.get("token"):
-                    return extra["token"]
+                    return str(extra["token"])
             logger.warning(
                 f"Airflow connection '{self.CONN_GITHUB}' not found, "
                 "falling back to environment variables"
