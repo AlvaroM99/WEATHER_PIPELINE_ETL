@@ -64,13 +64,13 @@ sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 # MYPY - Type Checking (Strict Configuration)
 # ============================================================================
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 
 # Strict type checking options
-strict = false  # Start with false, enable gradually
+strict = true
 warn_return_any = true
 warn_unused_configs = true
-warn_unused_ignores = true
+warn_unused_ignores = false
 warn_redundant_casts = true
 warn_unreachable = true
 

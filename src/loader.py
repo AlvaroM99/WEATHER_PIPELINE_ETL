@@ -261,8 +261,8 @@ class Loader(BaseLoader):
         self.log_start("Loading fct_weather_observation")
         
         # Extract DAG context for ETL logging
-        dag_id = context.get("dag", {}).get("dag_id", "loading_pipeline")
-        task_id = context.get("task_instance", {}).get("task_id", "load_fact_observation")
+        dag_id = context.get("dag").dag_id if context.get("dag") else "loading_pipeline"
+        task_id = context.get("task_instance").task_id if context.get("task_instance") else "load_generic"
         execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
 
         with self.connection() as conn:

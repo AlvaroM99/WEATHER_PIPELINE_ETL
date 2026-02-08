@@ -7,13 +7,15 @@ Credentials are managed through SecretsManager which prioritizes
 Airflow Connections when available, with fallback to environment variables.
 """
 
+from typing import Any, Dict
+
 try:
     from src.config.secrets_manager import get_minio_credentials
 except ImportError:
     from config.secrets_manager import get_minio_credentials  # type: ignore[no-redef]
 
 
-def get_minio_connection() -> dict:
+def get_minio_connection() -> Dict[str, Any]:
     """
     Get MinIO connection configuration.
 

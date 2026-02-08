@@ -7,7 +7,7 @@ Uses pandas-based validation for stability across Great Expectations versions.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import pandas as pd
 
@@ -24,8 +24,8 @@ class ValidationResult:
     total_expectations: int = 0
     successful_expectations: int = 0
     failed_expectations: int = 0
-    failed_details: List[Dict] = field(default_factory=list)
-    statistics: Dict = field(default_factory=dict)
+    failed_details: List[Dict[str, Any]] = field(default_factory=list)
+    statistics: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def success_rate(self) -> float:
@@ -34,7 +34,7 @@ class ValidationResult:
             return 0.0
         return self.successful_expectations / self.total_expectations
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging/storage."""
         return {
             "success": self.success,

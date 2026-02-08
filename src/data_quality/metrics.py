@@ -9,7 +9,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import pandas as pd
 
@@ -25,9 +25,9 @@ class QualityMetric:
     timestamp: datetime = field(default_factory=datetime.now)
     table_name: str = ""
     dimension: str = ""  # completeness, accuracy, timeliness, validity
-    metadata: Dict = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "metric_name": self.metric_name,
             "value": self.value,
@@ -51,7 +51,7 @@ class QualityReport:
     validation_result: Optional[ValidationResult] = None
     recommendations: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "report_id": self.report_id,
             "generated_at": self.generated_at.isoformat(),
@@ -80,7 +80,7 @@ class DataQualityMetrics:
     - Detect anomalies in quality trends
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self._metrics_history: List[QualityMetric] = []
 
@@ -150,7 +150,7 @@ class DataQualityMetrics:
             return 0.0
 
         unique_count = df[key_columns].drop_duplicates().shape[0]
-        return unique_count / len(df)
+        return float(unique_count) / float(len(df))
 
     def calculate_freshness(
         self, df: pd.DataFrame, timestamp_column: str, max_age_hours: float = 24.0
@@ -190,7 +190,7 @@ class DataQualityMetrics:
             elif age_hours >= max_age_hours:
                 return 0.0
             else:
-                return 1.0 - (age_hours / max_age_hours)
+                return float(1.0 - (age_hours / max_age_hours))
 
         except Exception as e:
             self.logger.warning(f"Error calculating freshness: {e}")
@@ -219,7 +219,7 @@ class DataQualityMetrics:
             return 1.0
 
         in_range = ((valid_values >= min_value) & (valid_values <= max_value)).sum()
-        return in_range / len(valid_values)
+        return float(in_range) / float(len(valid_values))
 
     def generate_report(
         self,
@@ -448,6 +448,6 @@ class DataQualityMetrics:
 
         return anomalies
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         """Clear metrics history."""
         self._metrics_history = []
