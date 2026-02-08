@@ -53,8 +53,23 @@ CREATE INDEX IF NOT EXISTS idx_lake_metadata_status ON lake_metadata(status);
 COMMENT ON TABLE lake_metadata IS 'Tracks data lineage and metadata for files in the data lake (Bronze and Silver layers)';
 
 -- ============================================================================
--- DIMENSIONAL TABLES
+-- Main Initialization Script
 -- ============================================================================
--- Note: Dimensional tables are created in init-dimensional-tables.sql
--- This script is executed automatically during PostgreSQL initialization
+-- This script initializes the weather data warehouse schema and tables
+-- Execute order: init.sql → init-dimensional-tables.sql → init-fact-tables.sql → init-etl-audit.sql
 
+\echo 'Starting database initialization...'
+
+\echo 'Loading dimensional tables...'
+\i /docker-entrypoint-initdb.d/init-dimensional-tables.sql
+
+\echo 'Loading fact tables...'
+\i /docker-entrypoint-initdb.d/init-fact-tables.sql
+
+\echo 'Loading ETL audit tables...'
+\i /docker-entrypoint-initdb.d/init-etl-audit.sql
+
+\echo 'Database initialization complete!'
+
+-- Create schema
+CREATE SCHEMA IF NOT EXISTS dwh;

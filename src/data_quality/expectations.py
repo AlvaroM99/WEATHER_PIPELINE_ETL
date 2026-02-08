@@ -139,7 +139,7 @@ MARINE_CONFIG = {
 
 
 def _run_validation(
-    df: pd.DataFrame, suite_name: str, config: Dict, strict_mode: bool = False
+    df: pd.DataFrame, suite_name: str, config: Dict[str, Any], strict_mode: bool = False
 ) -> ValidationResult:
     """
     Run validation against a DataFrame using the specified configuration.

@@ -7,7 +7,7 @@ Uses pandas-based validation for stability across Great Expectations versions.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import pandas as pd
 
@@ -24,8 +24,8 @@ class ValidationResult:
     total_expectations: int = 0
     successful_expectations: int = 0
     failed_expectations: int = 0
-    failed_details: List[Dict] = field(default_factory=list)
-    statistics: Dict = field(default_factory=dict)
+    failed_details: List[Dict[str, Any]] = field(default_factory=list)
+    statistics: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def success_rate(self) -> float:
@@ -34,7 +34,7 @@ class ValidationResult:
             return 0.0
         return self.successful_expectations / self.total_expectations
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging/storage."""
         return {
             "success": self.success,
@@ -305,12 +305,12 @@ class DataQualityValidator:
                         {
                             "expectation_type": "expect_column_values_to_be_between",
                             "column": col,
-                            "unexpected_count": invalid_count,
-                            "unexpected_percent": (1.0 - compliance) * 100,
+                            "unexpected_count": int(invalid_count),
+                            "unexpected_percent": float((1.0 - compliance) * 100),
                             "kwargs": {
-                                "min_value": min_val,
-                                "max_value": max_val,
-                                "mostly": mostly,
+                                "min_value": float(min_val),
+                                "max_value": float(max_val),
+                                "mostly": float(mostly),
                             },
                         }
                     )
@@ -332,9 +332,9 @@ class DataQualityValidator:
                         {
                             "expectation_type": "expect_column_values_to_not_be_null",
                             "column": col,
-                            "unexpected_count": null_count,
-                            "unexpected_percent": (1.0 - completeness) * 100,
-                            "kwargs": {"mostly": completeness_threshold},
+                            "unexpected_count": int(null_count),
+                            "unexpected_percent": float((1.0 - completeness) * 100),
+                            "kwargs": {"mostly": float(completeness_threshold)},
                         }
                     )
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 from io import StringIO
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pandas as pd
 
@@ -70,7 +70,6 @@ def load_cities_from_github() -> pd.DataFrame:
         return _cities_cache.copy()
 
     with _cache_lock:
-        # Double-check after acquiring lock (another thread may have populated)
         if _cities_cache is not None:
             return _cities_cache.copy()
 
@@ -142,9 +141,10 @@ def get_cities() -> List[CityDict]:
         return []
 
     # Vectorized conversion to list of dicts
-    return df.rename(columns={"city_name": "name", "latitud": "lat", "longitud": "lon"})[
+    result: list[dict[str, Any]] = df.rename(columns={"city_name": "name", "latitud": "lat", "longitud": "lon"})[
         ["name", "lat", "lon"]
-    ].to_dict("records")
+    ].to_dict("records")  # type: ignore[assignment]
+    return result
 
 
 def get_coastal_cities() -> List[CityDict]:
@@ -159,11 +159,12 @@ def get_coastal_cities() -> List[CityDict]:
     # Filter for coastal cities and vectorized conversion
     coastal_df: pd.DataFrame = df_raw[df_raw["is_coastal"] == 1]
 
-    return coastal_df.rename(
+    result: list[dict[str, Any]] = coastal_df.rename(
         columns={
             "city_name": "name",
             "latitud": "lat",
             "longitud": "lon",
             "city_code": "code",
         }
-    )[["name", "lat", "lon", "code"]].to_dict("records")
+    )[["name", "lat", "lon", "code"]].to_dict("records")  # type: ignore[assignment]
+    return result

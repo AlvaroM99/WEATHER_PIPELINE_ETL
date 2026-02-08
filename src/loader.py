@@ -259,11 +259,18 @@ class Loader(BaseLoader):
             Number of records inserted
         """
         self.log_start("Loading fct_weather_observation")
+        
+        # Extract DAG context for ETL logging
+        dag_id = context.get("dag").dag_id if context.get("dag") else "loading_pipeline"
+        task_id = context.get("task_instance").task_id if context.get("task_instance") else "load_generic"
+        execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
 
         with self.connection() as conn:
+            # Start ETL run logging
+            run_id = self.log_etl_start(dag_id, task_id, execution_date, conn)
+            
             try:
                 name_map, _ = self.get_city_id_mapping(conn)
-                execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
                 date_id = self.get_date_id(execution_date)
 
                 object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
@@ -271,6 +278,7 @@ class Loader(BaseLoader):
                     df = self.minio_client.read_parquet(SILVER_OPENWEATHER_BUCKET, object_path)
                 except Exception:
                     self.logger.warning(f"No data found for {execution_date}")
+                    self.log_etl_end(run_id, 0, conn, status="success")
                     return 0
 
                 # Validate data quality before loading
@@ -317,6 +325,7 @@ class Loader(BaseLoader):
                     )
 
                 if not records:
+                    self.log_etl_end(run_id, 0, conn, status="success")
                     return 0
 
                 insert_query = """
@@ -335,8 +344,13 @@ class Loader(BaseLoader):
                 rowcount: int = cur.rowcount if cur.rowcount is not None else 0
                 self.log_end(f"Inserted {rowcount} records")
                 cur.close()
+                
+                # End ETL run logging with success
+                self.log_etl_end(run_id, rowcount, conn, status="success")
                 return rowcount
             except Exception as e:
+                # End ETL run logging with failure
+                self.log_etl_end(run_id, 0, conn, status="failed", error_message=str(e))
                 self.log_error("Error loading observation", e)
                 raise
 
@@ -717,7 +731,7 @@ class Loader(BaseLoader):
         table_name: Optional[str] = None,
     ) -> int:
         """
-        Generic loader with integrated data quality validation.
+        Generic loader with integrated data quality validation and ETL logging.
 
         Args:
             context: Airflow context with execution date
@@ -733,8 +747,15 @@ class Loader(BaseLoader):
         """
         execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
         extraction_date_id: int = self.get_date_id(execution_date) or 0
+        
+        # Extract DAG context for ETL logging
+        dag_id = context.get("dag").dag_id if context.get("dag") else "loading_pipeline"
+        task_id = context.get("task_instance").task_id if context.get("task_instance") else f"load_{table_name or 'unknown'}"
 
         with self.connection() as conn:
+            # Start ETL run logging
+            run_id = self.log_etl_start(dag_id, task_id, execution_date, conn)
+            
             try:
                 name_map, _ = self.get_city_id_mapping(conn)
                 silver_path = prefix_template.format(execution_date=execution_date)
@@ -744,11 +765,15 @@ class Loader(BaseLoader):
                     parquet_files = [
                         obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
                     ]
-                except Exception:
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to list objects in bucket={bucket}, prefix={silver_path}: {e}"
+                    )
                     parquet_files = []
 
                 if not parquet_files:
                     self.logger.warning(f"No files found for {execution_date}")
+                    self.log_etl_end(run_id, 0, conn, status="success")
                     return 0
 
                 latest_file = sorted(parquet_files)[-1]
@@ -781,6 +806,7 @@ class Loader(BaseLoader):
                     records.append(mapper(row, city_id, extraction_date_id))
 
                 if not records:
+                    self.log_etl_end(run_id, 0, conn, status="success")
                     return 0
 
                 # Add created_at timestamp
@@ -791,12 +817,16 @@ class Loader(BaseLoader):
                 execute_values(cur, insert_query, records_with_time)
 
                 rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-                self.logger.info(f"Inserted {rowcount} records")
                 cur.close()
+                
+                # End ETL run logging with success
+                self.log_etl_end(run_id, rowcount, conn, status="success")
                 return rowcount
 
             except Exception as e:
-                self.log_error("Error loading data", e)
+                # End ETL run logging with failure
+                self.log_etl_end(run_id, 0, conn, status="failed", error_message=str(e))
+                self.log_error(f"Error in _load_generic for {table_name}", e)
                 raise
 
     # ========================================================================

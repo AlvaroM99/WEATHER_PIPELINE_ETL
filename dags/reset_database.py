@@ -75,6 +75,11 @@ def create_fact_tables(**context):
     execute_sql_file("/opt/airflow/sql/init-fact-tables.sql")
 
 
+def create_etl_audit_tables(**context):
+    """Create ETL audit and observability tables"""
+    execute_sql_file("/opt/airflow/sql/init-etl-audit.sql")
+
+
 def populate_dimensions(**context):
     """Uses DimensionalLoader to populate data"""
     logger.info("Populating dimensional tables...")
@@ -94,7 +99,7 @@ default_args = {
 with DAG(
     "reset_database_pipeline",
     default_args=default_args,
-    description="FULL RESET: Drop Schema -> Create Dims -> Load Dims -> Create Facts",
+    description="FULL RESET: Drop Schema -> Create Dims -> Load Dims -> Create Facts -> Create Audit",
     schedule_interval=None,  # Manual trigger only
     start_date=datetime(2026, 1, 27),
     catchup=False,
@@ -125,5 +130,11 @@ with DAG(
         python_callable=create_fact_tables,
     )
 
+    # Task 5: Create ETL Audit Tables
+    task_create_audit = PythonOperator(
+        task_id="create_etl_audit_tables",
+        python_callable=create_etl_audit_tables,
+    )
+
     # Flow
-    task_drop_schema >> task_create_dims >> task_populate_dims >> task_create_facts
+    task_drop_schema >> task_create_dims >> task_populate_dims >> task_create_facts >> task_create_audit

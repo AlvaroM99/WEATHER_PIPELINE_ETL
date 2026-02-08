@@ -9,7 +9,7 @@ import time
 import traceback
 from datetime import datetime
 from functools import wraps
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 
@@ -61,7 +61,7 @@ def setup_debug_logging(level: str = "DEBUG") -> logging.Logger:
     return logger
 
 
-def timing_decorator(func):
+def timing_decorator(func: Callable) -> Callable:
     """
     Decorator to measure and log function execution time.
 
@@ -131,8 +131,9 @@ def validate_dataframe(
     }
 
     # Check for high null ratios
-    for col, null_count in result["stats"]["null_counts"].items():
-        null_ratio = null_count / len(df)
+    for col in result["stats"]["null_counts"]:
+        null_count = result["stats"]["null_counts"][col]
+        null_ratio = float(null_count) / len(df)
         if null_ratio > 0.5:
             result["issues"].append(f"Column '{col}' has {null_ratio:.1%} null values")
 
