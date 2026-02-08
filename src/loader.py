@@ -744,7 +744,10 @@ class Loader(BaseLoader):
                     parquet_files = [
                         obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
                     ]
-                except Exception:
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to list objects in bucket={bucket}, prefix={silver_path}: {e}"
+                    )
                     parquet_files = []
 
                 if not parquet_files:

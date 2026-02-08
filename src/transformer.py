@@ -327,11 +327,12 @@ class Transformer(BaseETLLogger):
 
         all_dfs: List[pd.DataFrame] = []
         for bronze_obj in bronze_objects:
-            try:
-                object_path: Optional[str] = bronze_obj.get("object_path")
-                if not object_path:
-                    continue
+            object_path: Optional[str] = bronze_obj.get("object_path")
+            if not object_path:
+                self.logger.warning(f"Bronze object missing object_path: {bronze_obj}")
+                continue
 
+            try:
                 data: Dict[str, Any] = self.minio_client.read_json(
                     BRONZE_OPENMETEO_BUCKET, object_path
                 )

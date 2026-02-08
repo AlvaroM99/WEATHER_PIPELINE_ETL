@@ -104,8 +104,6 @@ exclude = [
     "tests/htmlcov",
     "build",
     "dist",
-    "tests",
-    "dags"
 ]
 
 # Per-module overrides for external libraries
@@ -123,26 +121,17 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Less strict for config modules during transition
-[[tool.mypy.overrides]]
-module = "src.config.*"
-disallow_untyped_defs = false
-warn_return_any = false
-
-# Less strict for data quality module (needs separate typing effort)
-[[tool.mypy.overrides]]
-module = "src.data_quality.*"
-ignore_errors = true
-
-# Less strict for debug utils (needs separate typing effort)
-[[tool.mypy.overrides]]
-module = "src.utils.debug_utils"
-ignore_errors = true
-
 # Less strict for DAGs (Airflow dynamic imports)
 [[tool.mypy.overrides]]
 module = "dags.*"
 ignore_errors = true
+
+# Less strict for tests (allow untyped defs in tests)
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
 
 # ============================================================================
 # PYTEST - Testing Configuration
