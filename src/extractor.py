@@ -188,36 +188,6 @@ class Extractor(BaseETLLogger):
         Returns:
             Number of successfully uploaded files
         """
-    def _extract_openmeteo_generic(
-        self,
-        context: AirflowContext,
-        api_url: str,
-        param_key: str,
-        param_values: List[str],
-        path_prefix: str,
-        file_prefix: str,
-        xcom_key: str,
-        log_label: str,
-    ) -> int:
-        """
-        Generic extraction logic for all Open-Meteo endpoints.
-
-        Iterates over all capital cities, fetches data from the specified
-        Open-Meteo API endpoint, and uploads raw JSON to the bronze layer.
-
-        Args:
-            context: Airflow context containing execution date and task instance
-            api_url: Open-Meteo API endpoint URL
-            param_key: API parameter key for data fields ('daily' or 'hourly')
-            param_values: List of field names to request from the API
-            path_prefix: MinIO object path prefix (e.g. 'forecast/daily')
-            file_prefix: Filename prefix (e.g. 'weather_daily')
-            xcom_key: XCom key for pushing uploaded objects metadata
-            log_label: Human-readable label for log messages
-
-        Returns:
-            Number of successfully uploaded files
-        """
         self.log_start(f"Open-Meteo {log_label} extraction")
 
         capitals_df: pd.DataFrame = get_capitals_dataframe()

@@ -2,6 +2,8 @@
 Custom exceptions for data quality validation.
 """
 
+from typing import Optional
+
 
 class DataQualityException(Exception):
     """
@@ -11,7 +13,7 @@ class DataQualityException(Exception):
     into the data warehouse.
     """
 
-    def __init__(self, message: str, validation_results: dict = None):
+    def __init__(self, message: str, validation_results: Optional[dict] = None):
         self.message = message
         self.validation_results = validation_results or {}
         super().__init__(self.message)
@@ -30,7 +32,7 @@ class ValidationError(DataQualityException):
     Indicates missing required columns or incorrect data types.
     """
 
-    def __init__(self, message: str, missing_columns: list = None, type_errors: list = None):
+    def __init__(self, message: str, missing_columns: Optional[list] = None, type_errors: Optional[list] = None):
         self.missing_columns = missing_columns or []
         self.type_errors = type_errors or []
         super().__init__(message)
@@ -49,7 +51,7 @@ class AnomalyDetectionError(DataQualityException):
     Raised when anomaly detection identifies suspicious data patterns.
     """
 
-    def __init__(self, message: str, anomalies: list = None):
+    def __init__(self, message: str, anomalies: Optional[list] = None):
         self.anomalies = anomalies or []
         super().__init__(message)
 
@@ -59,7 +61,7 @@ class CompletenessError(DataQualityException):
     Raised when data completeness falls below acceptable thresholds.
     """
 
-    def __init__(self, message: str, completeness_score: float = None, threshold: float = None):
+    def __init__(self, message: str, completeness_score: Optional[float] = None, threshold: Optional[float] = None):
         self.completeness_score = completeness_score
         self.threshold = threshold
         super().__init__(message)
