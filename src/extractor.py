@@ -29,13 +29,13 @@ from src.config.apis.openmeteo_config import (
     HOURLY_FORECAST_PARAMS,
     MARINE_PARAMS,
     OPENMETEO_AIR_QUALITY_URL,
-    OPENMETEO_API_KEY,
     OPENMETEO_FORECAST_URL,
     OPENMETEO_MARINE_URL,
     OPENMETEO_POLLEN_URL,
     POLLEN_PARAMS,
+    get_api_key as get_openmeteo_api_key,
 )
-from src.config.apis.openweather_config import API_KEY
+from src.config.apis.openweather_config import get_api_key as get_openweather_api_key
 
 # Import configuration and utils
 from src.config.lake_config import (
@@ -97,7 +97,7 @@ class Extractor(BaseETLLogger):
                 params: Dict[str, Any] = {
                     "lat": city["lat"],
                     "lon": city["lon"],
-                    "appid": API_KEY,
+                    "appid": get_openweather_api_key(),
                     "units": "metric",
                 }
 
@@ -183,8 +183,9 @@ class Extractor(BaseETLLogger):
                 param_key: ",".join(param_values),
                 "timezone": DEFAULT_TIMEZONE,
             }
-            if OPENMETEO_API_KEY:
-                params["apikey"] = OPENMETEO_API_KEY
+            openmeteo_key = get_openmeteo_api_key()
+            if openmeteo_key:
+                params["apikey"] = openmeteo_key
 
             try:
                 self.logger.info(f"Fetching {log_label} for {city['municipio_nombre']}")

@@ -6,29 +6,23 @@ Credentials are managed through SecretsManager which prioritizes
 Airflow Connections when available, with fallback to environment variables.
 """
 
-import os
+import logging
+from typing import Optional
 
 try:
     from src.config.secrets_manager import get_aemet_api_key
 except ImportError:
     from config.secrets_manager import get_aemet_api_key  # type: ignore[no-redef]
 
-# API Key (via SecretsManager)
-_api_key = None
+logger = logging.getLogger(__name__)
 
 
-def get_api_key():
-    """Get AEMET API key with lazy loading."""
-    global _api_key
-    if _api_key is None:
-        _api_key = get_aemet_api_key()
-        if not _api_key:
-            print("WARNING: AEMET_API_KEY not found in Airflow Connections or environment.")
-    return _api_key
-
-
-# Legacy: Direct access for backward compatibility
-AEMET_API_KEY = os.getenv("AEMET_API_KEY")
+def get_api_key() -> Optional[str]:
+    """Get AEMET API key via SecretsManager."""
+    key = get_aemet_api_key()
+    if not key:
+        logger.warning("AEMET_API_KEY not found in Airflow Connections or environment.")
+    return key
 
 # Base URL
 AEMET_BASE_URL = "https://opendata.aemet.es/opendata/api"

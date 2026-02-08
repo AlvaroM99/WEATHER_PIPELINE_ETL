@@ -6,27 +6,17 @@ Credentials are managed through SecretsManager which prioritizes
 Airflow Connections when available, with fallback to environment variables.
 """
 
-import os
+from typing import Optional
 
 try:
     from src.config.secrets_manager import get_openmeteo_api_key
 except ImportError:
     from config.secrets_manager import get_openmeteo_api_key  # type: ignore[no-redef]
 
-# API Key (optional - not required for non-commercial use)
-_api_key = None
 
-
-def get_api_key():
-    """Get Open-Meteo API key with lazy loading (optional for free tier)."""
-    global _api_key
-    if _api_key is None:
-        _api_key = get_openmeteo_api_key()
-    return _api_key
-
-
-# Legacy: Direct access for backward compatibility
-OPENMETEO_API_KEY = os.getenv("OPENMETEO_API_KEY")
+def get_api_key() -> Optional[str]:
+    """Get Open-Meteo API key via SecretsManager (optional for free tier)."""
+    return get_openmeteo_api_key()
 
 # Base URLs for different Open-Meteo services
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"

@@ -350,54 +350,56 @@ def generate_diagnostic_report(
     Returns:
         Dictionary with full diagnostic report
     """
-    import os
+    from src.config.database_config import get_postgres_config
+    from src.config.lake_config import get_minio_connection
+    from src.config.secrets_manager import get_openweather_api_key
+
+    import sys
 
     report = {
         "timestamp": datetime.now().isoformat(),
-        "environment": {"python_version": None, "required_env_vars": {}},
+        "environment": {"python_version": sys.version, "required_env_vars": {}},
         "connectivity": {},
     }
 
-    # Check Python version
-    import sys
+    # Check credentials availability via SecretsManager
+    pg_cfg = get_postgres_config()
+    minio_cfg = get_minio_connection()
+    ow_key = get_openweather_api_key()
 
-    report["environment"]["python_version"] = sys.version
+    credential_checks = {
+        "OPENWEATHER_API_KEY": ow_key is not None,
+        "MINIO_ENDPOINT": bool(minio_cfg["endpoint"]),
+        "MINIO_ACCESS_KEY": bool(minio_cfg["access_key"]),
+        "MINIO_SECRET_KEY": bool(minio_cfg["secret_key"]),
+        "POSTGRES_HOST": bool(pg_cfg["host"]),
+        "POSTGRES_USER": bool(pg_cfg["user"]),
+        "POSTGRES_PASSWORD": bool(pg_cfg["password"]),
+        "POSTGRES_DB": bool(pg_cfg["database"]),
+    }
 
-    # Check required environment variables
-    required_vars = [
-        "OPENWEATHER_API_KEY",
-        "MINIO_ENDPOINT",
-        "MINIO_ACCESS_KEY",
-        "MINIO_SECRET_KEY",
-        "POSTGRES_HOST",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-        "POSTGRES_DB",
-    ]
-
-    for var in required_vars:
-        value = os.getenv(var)
+    for var, is_set in credential_checks.items():
         report["environment"]["required_env_vars"][var] = {
-            "set": value is not None,
-            "value": "***" if value else None,  # Mask actual values
+            "set": is_set,
+            "value": "***" if is_set else None,
         }
 
     # Connectivity checks
     if include_minio:
         report["connectivity"]["minio"] = check_minio_connectivity(
-            endpoint=os.getenv("MINIO_ENDPOINT", "localhost:9000"),
-            access_key=os.getenv("MINIO_ACCESS_KEY", ""),
-            secret_key=os.getenv("MINIO_SECRET_KEY", ""),
-            secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
+            endpoint=minio_cfg["endpoint"],
+            access_key=minio_cfg["access_key"],
+            secret_key=minio_cfg["secret_key"],
+            secure=minio_cfg["secure"],
         )
 
     if include_postgres:
         report["connectivity"]["postgres"] = check_postgres_connectivity(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            port=int(os.getenv("POSTGRES_PORT", "5432")),
-            database=os.getenv("POSTGRES_DB", "weather"),
-            user=os.getenv("POSTGRES_USER", ""),
-            password=os.getenv("POSTGRES_PASSWORD", ""),
+            host=pg_cfg["host"],
+            port=pg_cfg["port"],
+            database=pg_cfg["database"],
+            user=pg_cfg["user"],
+            password=pg_cfg["password"],
         )
 
     return report

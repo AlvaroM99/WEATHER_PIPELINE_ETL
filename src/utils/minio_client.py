@@ -19,11 +19,8 @@ from minio.error import S3Error
 
 from src.config.lake_config import (
     BRONZE_BUCKET,
-    MINIO_ACCESS_KEY,
-    MINIO_ENDPOINT,
-    MINIO_SECRET_KEY,
-    MINIO_SECURE,
     SILVER_BUCKET,
+    get_minio_connection,
 )
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -85,11 +82,12 @@ class MinIOClient:
 
     def __init__(self) -> None:
         """Initialize MinIO client and ensure buckets exist."""
+        cfg = get_minio_connection()
         self.client: Minio = Minio(
-            MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=MINIO_SECURE,
+            cfg["endpoint"],
+            access_key=cfg["access_key"],
+            secret_key=cfg["secret_key"],
+            secure=cfg["secure"],
         )
         self._ensure_buckets()
 

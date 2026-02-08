@@ -18,13 +18,13 @@ config/
 Usage:
 ------
     # API configurations
-    from src.config.apis.aemet_config import DEFAULT_STATION_IDS
+    from src.config.apis.aemet_config import DEFAULT_STATION_IDS, get_api_key
     from src.config.apis.openmeteo_config import DAILY_FORECAST_PARAMS
-    from src.config.apis.openweather_config import API_KEY
+    from src.config.apis.openweather_config import get_api_key
 
-    # Database configuration
-    from src.config.database_config import POSTGRES_HOST
+    # Database configuration (via SecretsManager)
+    from src.config.database_config import get_postgres_config
 
     # Data Lake configuration
-    from src.config.lake_config import BRONZE_BUCKET
+    from src.config.lake_config import BRONZE_BUCKET, get_minio_connection
 """

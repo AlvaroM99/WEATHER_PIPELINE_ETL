@@ -14,13 +14,7 @@ from typing import Optional
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
 
-from src.config.database_config import (
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
-    POSTGRES_USER,
-)
+from src.config.database_config import get_postgres_config
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +25,15 @@ def _get_pool() -> ThreadedConnectionPool:
     """Get or create the global connection pool (lazy initialization)."""
     global _pool
     if _pool is None or _pool.closed:
+        cfg = get_postgres_config()
         _pool = ThreadedConnectionPool(
             minconn=1,
             maxconn=5,
-            host=POSTGRES_HOST,
-            port=POSTGRES_PORT,
-            database=POSTGRES_DB,
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD,
+            host=cfg["host"],
+            port=cfg["port"],
+            database=cfg["database"],
+            user=cfg["user"],
+            password=cfg["password"],
         )
         atexit.register(_close_pool)
         logger.info("Database connection pool created")
