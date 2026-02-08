@@ -749,8 +749,8 @@ class Loader(BaseLoader):
         extraction_date_id: int = self.get_date_id(execution_date) or 0
         
         # Extract DAG context for ETL logging
-        dag_id = context.get("dag", {}).get("dag_id", "loading_pipeline")
-        task_id = context.get("task_instance", {}).get("task_id", f"load_{table_name or 'unknown'}")
+        dag_id = context.get("dag").dag_id if context.get("dag") else "loading_pipeline"
+        task_id = context.get("task_instance").task_id if context.get("task_instance") else f"load_{table_name or 'unknown'}"
 
         with self.connection() as conn:
             # Start ETL run logging
