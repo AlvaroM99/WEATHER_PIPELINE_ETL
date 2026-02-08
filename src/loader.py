@@ -17,7 +17,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-from src.config.db_pool import get_db_connection, return_db_connection
+from src.base_loader import BaseLoader
 from src.config.lake_config import (
     SILVER_AEMET_BUCKET,
     SILVER_OPENWEATHER_BUCKET,
@@ -25,7 +25,6 @@ from src.config.lake_config import (
 )
 from src.dimensional_loader import DimensionalLoader
 from src.type_aliases import AirflowContext, CityIdMapping, MapperFunction, RecordTuple
-from src.utils.etl_logger import BaseETLLogger
 from src.utils.minio_client import MinIOClient, get_minio_client
 
 # Data quality imports (optional - graceful degradation if not installed)
@@ -55,14 +54,14 @@ except ImportError as e:
     )
 
 
-class Loader(BaseETLLogger):
+class Loader(BaseLoader):
     """
     Unified Loader Manager.
 
     Handles loading for all fact tables with integrated data quality validation.
 
     Attributes:
-        logger: Logger instance for this class (via BaseETLLogger)
+        logger: Logger instance for this class (via BaseLoader)
         minio_client: MinIO client for data lake operations
         enable_validation: Whether data validation is enabled
         strict_validation: Whether to raise exceptions on validation failure
@@ -194,15 +193,6 @@ class Loader(BaseETLLogger):
         """Get a summary of all validation results."""
         return {table: result.to_dict() for table, result in self._last_validation_results.items()}
 
-    def get_db_connection(self) -> psycopg2.extensions.connection:
-        """
-        Get a PostgreSQL database connection from the pool.
-
-        Returns:
-            psycopg2 connection object
-        """
-        return get_db_connection()
-
     def get_city_id_mapping(
         self, conn: psycopg2.extensions.connection
     ) -> Tuple[CityIdMapping, CityIdMapping]:
@@ -271,89 +261,86 @@ class Loader(BaseETLLogger):
             Number of records inserted
         """
         self.log_start("Loading fct_weather_observation")
-        conn = self.get_db_connection()
-        try:
-            name_map, _ = self.get_city_id_mapping(conn)
-            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-            date_id = self.get_date_id(execution_date)
 
-            object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
+        with self.connection() as conn:
             try:
-                df = self.minio_client.read_parquet(SILVER_OPENWEATHER_BUCKET, object_path)
-            except Exception:
-                self.logger.warning(f"No data found for {execution_date}")
-                return 0
+                name_map, _ = self.get_city_id_mapping(conn)
+                execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+                date_id = self.get_date_id(execution_date)
 
-            # Validate data quality before loading
-            self.validate_data(df, "observation", "fct_weather_observation")
+                object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
+                try:
+                    df = self.minio_client.read_parquet(SILVER_OPENWEATHER_BUCKET, object_path)
+                except Exception:
+                    self.logger.warning(f"No data found for {execution_date}")
+                    return 0
 
-            records = []
-            for _, row in df.iterrows():
-                city_id = name_map.get(row.get("city"))
-                if not city_id:
-                    continue
+                # Validate data quality before loading
+                self.validate_data(df, "observation", "fct_weather_observation")
 
-                # Handle timestamp - use date if dt not available
-                obs_timestamp = (
-                    pd.to_datetime(row.get("dt"), unit="s")
-                    if "dt" in row and pd.notna(row.get("dt"))
-                    else datetime.now()
-                )
+                records = []
+                for _, row in df.iterrows():
+                    city_id = name_map.get(row.get("city"))
+                    if not city_id:
+                        continue
 
-                # Clean all values to convert NaN to None
-                records.append(
-                    (
-                        city_id,
-                        date_id,
-                        obs_timestamp,
-                        self.clean_value(row.get("temperature")),
-                        self.clean_value(row.get("feels_like")),
-                        self.clean_value(row.get("temp_min")),
-                        self.clean_value(row.get("temp_max")),
-                        self.clean_value(row.get("pressure")),
-                        self.clean_value(row.get("humidity")),
-                        self.clean_value(row.get("visibility")),
-                        self.clean_value(row.get("wind_speed")),
-                        self.clean_value(row.get("wind_deg")),
-                        self.clean_value(row.get("wind_gust")),
-                        self.clean_value(row.get("clouds")),
-                        self.clean_value(row.get("weather_id")),
-                        row.get("weather_main"),
-                        row.get("weather_description"),
-                        self.clean_value(row.get("rain_1h")),
-                        self.clean_value(row.get("rain_3h")),
-                        self.clean_value(row.get("snow_1h")),
-                        self.clean_value(row.get("snow_3h")),
+                    # Handle timestamp - use date if dt not available
+                    obs_timestamp = (
+                        pd.to_datetime(row.get("dt"), unit="s")
+                        if "dt" in row and pd.notna(row.get("dt"))
+                        else datetime.now()
                     )
-                )
 
-            if not records:
-                return 0
+                    # Clean all values to convert NaN to None
+                    records.append(
+                        (
+                            city_id,
+                            date_id,
+                            obs_timestamp,
+                            self.clean_value(row.get("temperature")),
+                            self.clean_value(row.get("feels_like")),
+                            self.clean_value(row.get("temp_min")),
+                            self.clean_value(row.get("temp_max")),
+                            self.clean_value(row.get("pressure")),
+                            self.clean_value(row.get("humidity")),
+                            self.clean_value(row.get("visibility")),
+                            self.clean_value(row.get("wind_speed")),
+                            self.clean_value(row.get("wind_deg")),
+                            self.clean_value(row.get("wind_gust")),
+                            self.clean_value(row.get("clouds")),
+                            self.clean_value(row.get("weather_id")),
+                            row.get("weather_main"),
+                            row.get("weather_description"),
+                            self.clean_value(row.get("rain_1h")),
+                            self.clean_value(row.get("rain_3h")),
+                            self.clean_value(row.get("snow_1h")),
+                            self.clean_value(row.get("snow_3h")),
+                        )
+                    )
 
-            insert_query = """
-                INSERT INTO dwh.fct_weather_observation (
-                    city_id, date_id, observation_timestamp,
-                    temperature, feels_like, temp_min, temp_max,
-                    pressure, humidity, visibility,
-                    wind_speed, wind_deg, wind_gust,
-                    cloudiness, weather_code, weather_main, weather_description,
-                    rain_1h, rain_3h, snow_1h, snow_3h
-                ) VALUES %s ON CONFLICT DO NOTHING
-            """
+                if not records:
+                    return 0
 
-            cur = conn.cursor()
-            execute_values(cur, insert_query, records)
-            conn.commit()
-            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-            self.log_end(f"Inserted {rowcount} records")
-            cur.close()
-            return rowcount
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading observation", e)
-            raise
-        finally:
-            return_db_connection(conn)
+                insert_query = """
+                    INSERT INTO dwh.fct_weather_observation (
+                        city_id, date_id, observation_timestamp,
+                        temperature, feels_like, temp_min, temp_max,
+                        pressure, humidity, visibility,
+                        wind_speed, wind_deg, wind_gust,
+                        cloudiness, weather_code, weather_main, weather_description,
+                        rain_1h, rain_3h, snow_1h, snow_3h
+                    ) VALUES %s ON CONFLICT DO NOTHING
+                """
+
+                cur = conn.cursor()
+                execute_values(cur, insert_query, records)
+                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                self.log_end(f"Inserted {rowcount} records")
+                cur.close()
+                return rowcount
+            except Exception as e:
+                self.log_error("Error loading observation", e)
+                raise
 
     # ========================================================================
     # Fact Forecast Daily Load
@@ -610,94 +597,90 @@ class Loader(BaseETLLogger):
 
         execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
         extraction_date_id: int = self.get_date_id(execution_date) or 0
-        conn = self.get_db_connection()
 
-        try:
-            name_map, _ = self.get_city_id_mapping(conn)
-            silver_path = f"marine/{execution_date}/"
-
+        with self.connection() as conn:
             try:
-                objects = self.minio_client.client.list_objects(
-                    "silver-openmeteo", prefix=silver_path
-                )
-                parquet_files = [
-                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                name_map, _ = self.get_city_id_mapping(conn)
+                silver_path = f"marine/{execution_date}/"
+
+                try:
+                    objects = self.minio_client.client.list_objects(
+                        "silver-openmeteo", prefix=silver_path
+                    )
+                    parquet_files = [
+                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                    ]
+                except Exception:
+                    parquet_files = []
+
+                if not parquet_files:
+                    self.logger.warning(f"No marine files found for {execution_date}")
+                    return 0
+
+                latest_file = sorted(parquet_files)[-1]
+                df = self.minio_client.read_parquet("silver-openmeteo", latest_file)
+
+                # Validate data quality before loading
+                self.validate_data(df, "marine", "fct_marine")
+
+                # Filter out rows where ALL marine metrics are NULL (inland cities)
+                marine_metrics = [
+                    "wave_height_max",
+                    "wave_direction_dominant",
+                    "wave_period_max",
+                    "wind_wave_height_max",
+                    "swell_wave_height_max",
                 ]
-            except Exception:
-                parquet_files = []
+                initial_count = len(df)
+                df = df.dropna(subset=marine_metrics, how="all")
+                filtered_count = initial_count - len(df)
+                if filtered_count > 0:
+                    self.logger.info(
+                        f"Filtered {filtered_count} rows with all NULL metrics (inland cities)"
+                    )
 
-            if not parquet_files:
-                self.logger.warning(f"No marine files found for {execution_date}")
-                return 0
+                # Deduplicate
+                if "city_name" in df.columns and "time" in df.columns:
+                    before_dedup = len(df)
+                    df.drop_duplicates(subset=["city_name", "time"], inplace=True)
+                    if len(df) < before_dedup:
+                        self.logger.warning(f"Dropped {before_dedup - len(df)} duplicate rows")
 
-            latest_file = sorted(parquet_files)[-1]
-            df = self.minio_client.read_parquet("silver-openmeteo", latest_file)
+                records = []
+                for _, row in df.iterrows():
+                    city_id = name_map.get(row.get("city_name"))
+                    if not city_id:
+                        continue
+                    records.append(self._map_marine(row, city_id, extraction_date_id))
 
-            # Validate data quality before loading
-            self.validate_data(df, "marine", "fct_marine")
+                if not records:
+                    self.logger.warning("No valid marine records to insert")
+                    return 0
 
-            # Filter out rows where ALL marine metrics are NULL (inland cities)
-            marine_metrics = [
-                "wave_height_max",
-                "wave_direction_dominant",
-                "wave_period_max",
-                "wind_wave_height_max",
-                "swell_wave_height_max",
-            ]
-            initial_count = len(df)
-            df = df.dropna(subset=marine_metrics, how="all")
-            filtered_count = initial_count - len(df)
-            if filtered_count > 0:
-                self.logger.info(
-                    f"Filtered {filtered_count} rows with all NULL metrics (inland cities)"
-                )
+                # Add created_at timestamp
+                current_time = datetime.now()
+                records_with_time = [(*rec, current_time) for rec in records]
 
-            # Deduplicate
-            if "city_name" in df.columns and "time" in df.columns:
-                before_dedup = len(df)
-                df.drop_duplicates(subset=["city_name", "time"], inplace=True)
-                if len(df) < before_dedup:
-                    self.logger.warning(f"Dropped {before_dedup - len(df)} duplicate rows")
+                insert_query = """
+                    INSERT INTO dwh.fct_marine (
+                        city_id, forecast_date_id, extraction_date_id,
+                        wave_height_max, wave_direction_dominant, wave_period_max,
+                        wind_wave_height_max, swell_wave_height_max, created_at
+                    ) VALUES %s
+                    ON CONFLICT (city_id, forecast_date_id, extraction_date_id) DO NOTHING
+                """
 
-            records = []
-            for _, row in df.iterrows():
-                city_id = name_map.get(row.get("city_name"))
-                if not city_id:
-                    continue
-                records.append(self._map_marine(row, city_id, extraction_date_id))
+                cur = conn.cursor()
+                execute_values(cur, insert_query, records_with_time)
 
-            if not records:
-                self.logger.warning("No valid marine records to insert")
-                return 0
+                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                self.logger.info(f"Inserted {rowcount} marine records")
+                cur.close()
+                return rowcount
 
-            # Add created_at timestamp
-            current_time = datetime.now()
-            records_with_time = [(*rec, current_time) for rec in records]
-
-            insert_query = """
-                INSERT INTO dwh.fct_marine (
-                    city_id, forecast_date_id, extraction_date_id,
-                    wave_height_max, wave_direction_dominant, wave_period_max,
-                    wind_wave_height_max, swell_wave_height_max, created_at
-                ) VALUES %s
-                ON CONFLICT (city_id, forecast_date_id, extraction_date_id) DO NOTHING
-            """
-
-            cur = conn.cursor()
-            execute_values(cur, insert_query, records_with_time)
-            conn.commit()
-
-            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-            self.logger.info(f"Inserted {rowcount} marine records")
-            cur.close()
-            return rowcount
-
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading marine data", e)
-            raise
-        finally:
-            return_db_connection(conn)
+            except Exception as e:
+                self.log_error("Error loading marine data", e)
+                raise
 
     def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""
@@ -752,75 +735,71 @@ class Loader(BaseETLLogger):
         """
         execution_date: str = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
         extraction_date_id: int = self.get_date_id(execution_date) or 0
-        conn = self.get_db_connection()
 
-        try:
-            name_map, _ = self.get_city_id_mapping(conn)
-            silver_path = prefix_template.format(execution_date=execution_date)
-
+        with self.connection() as conn:
             try:
-                objects = self.minio_client.client.list_objects(bucket, prefix=silver_path)
-                parquet_files = [
-                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                ]
-            except Exception:
-                parquet_files = []
+                name_map, _ = self.get_city_id_mapping(conn)
+                silver_path = prefix_template.format(execution_date=execution_date)
 
-            if not parquet_files:
-                self.logger.warning(f"No files found for {execution_date}")
-                return 0
+                try:
+                    objects = self.minio_client.client.list_objects(bucket, prefix=silver_path)
+                    parquet_files = [
+                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                    ]
+                except Exception:
+                    parquet_files = []
 
-            latest_file = sorted(parquet_files)[-1]
-            df = self.minio_client.read_parquet(bucket, latest_file)
+                if not parquet_files:
+                    self.logger.warning(f"No files found for {execution_date}")
+                    return 0
 
-            # Validate data quality before loading
-            if data_type and table_name:
-                self.validate_data(df, data_type, table_name)
+                latest_file = sorted(parquet_files)[-1]
+                df = self.minio_client.read_parquet(bucket, latest_file)
 
-            # Deduplicate data to avoid PK violations
-            if "city_name" in df.columns and "time" in df.columns:
-                initial_count = len(df)
-                df.drop_duplicates(subset=["city_name", "time"], inplace=True)
-                if len(df) < initial_count:
-                    self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
+                # Validate data quality before loading
+                if data_type and table_name:
+                    self.validate_data(df, data_type, table_name)
 
-            records = []
-            for _, row in df.iterrows():
-                city_id = name_map.get(row.get("city_name"))
-                if not city_id:
-                    # Try fallback to city column if city_name missing (common in some dfs)
-                    city_id = name_map.get(row.get("city"))
+                # Deduplicate data to avoid PK violations
+                if "city_name" in df.columns and "time" in df.columns:
+                    initial_count = len(df)
+                    df.drop_duplicates(subset=["city_name", "time"], inplace=True)
+                    if len(df) < initial_count:
+                        self.logger.warning(f"Dropped {initial_count - len(df)} duplicate rows")
 
-                if not city_id:
-                    self.logger.warning(
-                        f"City not found for row: {row.get('city_name') or row.get('city')}"
-                    )
-                    continue
+                records = []
+                for _, row in df.iterrows():
+                    city_id = name_map.get(row.get("city_name"))
+                    if not city_id:
+                        # Try fallback to city column if city_name missing (common in some dfs)
+                        city_id = name_map.get(row.get("city"))
 
-                records.append(mapper(row, city_id, extraction_date_id))
+                    if not city_id:
+                        self.logger.warning(
+                            f"City not found for row: {row.get('city_name') or row.get('city')}"
+                        )
+                        continue
 
-            if not records:
-                return 0
+                    records.append(mapper(row, city_id, extraction_date_id))
 
-            # Add created_at timestamp
-            current_time = datetime.now()
-            records_with_time = [(*rec, current_time) for rec in records]
+                if not records:
+                    return 0
 
-            cur = conn.cursor()
-            execute_values(cur, insert_query, records_with_time)
-            conn.commit()
+                # Add created_at timestamp
+                current_time = datetime.now()
+                records_with_time = [(*rec, current_time) for rec in records]
 
-            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-            self.logger.info(f"Inserted {rowcount} records")
-            cur.close()
-            return rowcount
+                cur = conn.cursor()
+                execute_values(cur, insert_query, records_with_time)
 
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading data", e)
-            raise
-        finally:
-            return_db_connection(conn)
+                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                self.logger.info(f"Inserted {rowcount} records")
+                cur.close()
+                return rowcount
+
+            except Exception as e:
+                self.log_error("Error loading data", e)
+                raise
 
     # ========================================================================
     # AEMET Load Methods
@@ -856,90 +835,83 @@ class Loader(BaseETLLogger):
             Number of records inserted/updated
         """
         self.log_start("Loading dim_aemet_stations")
-        conn = self.get_db_connection()
 
-        try:
-            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-            silver_path = f"stations/{execution_date}/"
-
+        with self.connection() as conn:
             try:
-                objects = self.minio_client.client.list_objects(
-                    SILVER_AEMET_BUCKET, prefix=silver_path
-                )
-                parquet_files = [
-                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                ]
-            except Exception:
-                parquet_files = []
+                execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+                silver_path = f"stations/{execution_date}/"
 
-            if not parquet_files:
-                self.logger.warning(
-                    f"No AEMET stations files found for {execution_date}, "
-                    "loading default stations via DimensionalLoader"
-                )
-                return_db_connection(conn)
-                # Fallback: load default stations using DimensionalLoader
-                dim_loader = DimensionalLoader()
-                dim_loader.load_dim_aemet_stations()
-                self.log_end("Loaded default AEMET stations via fallback")
-                return 15  # Default number of stations
-
-            latest_file = sorted(parquet_files)[-1]
-            df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
-
-            records = []
-            for _, row in df.iterrows():
-                records.append(
-                    (
-                        row.get("station_id"),
-                        row.get("station_name"),
-                        row.get("province"),
-                        self.clean_value(row.get("altitude")),
-                        self.clean_value(row.get("latitude")),
-                        self.clean_value(row.get("longitude")),
-                        row.get("synop_code"),
+                try:
+                    objects = self.minio_client.client.list_objects(
+                        SILVER_AEMET_BUCKET, prefix=silver_path
                     )
-                )
+                    parquet_files = [
+                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                    ]
+                except Exception:
+                    parquet_files = []
 
-            if not records:
-                # No records in silver, load defaults
-                return_db_connection(conn)
-                dim_loader = DimensionalLoader()
-                dim_loader.load_dim_aemet_stations()
-                self.log_end("Loaded default AEMET stations (empty silver file)")
-                return 15
+                if not parquet_files:
+                    self.logger.warning(
+                        f"No AEMET stations files found for {execution_date}, "
+                        "loading default stations via DimensionalLoader"
+                    )
+                    # Fallback: load default stations using DimensionalLoader
+                    dim_loader = DimensionalLoader()
+                    dim_loader.load_dim_aemet_stations()
+                    self.log_end("Loaded default AEMET stations via fallback")
+                    return 15  # Default number of stations
 
-            insert_query = """
-                INSERT INTO dwh.dim_aemet_stations (
-                    station_id, station_name, province, altitude,
-                    latitude, longitude, synop_code
-                ) VALUES %s
-                ON CONFLICT (station_id) DO UPDATE SET
-                    station_name = EXCLUDED.station_name,
-                    province = EXCLUDED.province,
-                    altitude = EXCLUDED.altitude,
-                    latitude = EXCLUDED.latitude,
-                    longitude = EXCLUDED.longitude,
-                    synop_code = EXCLUDED.synop_code,
-                    updated_at = CURRENT_TIMESTAMP
-            """
+                latest_file = sorted(parquet_files)[-1]
+                df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
 
-            cur = conn.cursor()
-            execute_values(cur, insert_query, records)
-            conn.commit()
+                records = []
+                for _, row in df.iterrows():
+                    records.append(
+                        (
+                            row.get("station_id"),
+                            row.get("station_name"),
+                            row.get("province"),
+                            self.clean_value(row.get("altitude")),
+                            self.clean_value(row.get("latitude")),
+                            self.clean_value(row.get("longitude")),
+                            row.get("synop_code"),
+                        )
+                    )
 
-            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-            self.log_end(f"Upserted {rowcount} AEMET stations from silver")
-            cur.close()
-            return rowcount
+                if not records:
+                    # No records in silver, load defaults
+                    dim_loader = DimensionalLoader()
+                    dim_loader.load_dim_aemet_stations()
+                    self.log_end("Loaded default AEMET stations (empty silver file)")
+                    return 15
 
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading AEMET stations", e)
-            raise
-        finally:
-            if not conn.closed:
-                return_db_connection(conn)
+                insert_query = """
+                    INSERT INTO dwh.dim_aemet_stations (
+                        station_id, station_name, province, altitude,
+                        latitude, longitude, synop_code
+                    ) VALUES %s
+                    ON CONFLICT (station_id) DO UPDATE SET
+                        station_name = EXCLUDED.station_name,
+                        province = EXCLUDED.province,
+                        altitude = EXCLUDED.altitude,
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
+                        synop_code = EXCLUDED.synop_code,
+                        updated_at = CURRENT_TIMESTAMP
+                """
+
+                cur = conn.cursor()
+                execute_values(cur, insert_query, records)
+
+                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                self.log_end(f"Upserted {rowcount} AEMET stations from silver")
+                cur.close()
+                return rowcount
+
+            except Exception as e:
+                self.log_error("Error loading AEMET stations", e)
+                raise
 
     # Shared INSERT query for AEMET fact table
     _AEMET_INSERT_QUERY = """
@@ -954,20 +926,19 @@ class Loader(BaseETLLogger):
         ON CONFLICT (station_id, date_id, extraction_date_id) DO NOTHING
     """
 
-    def _ensure_station_map(
-        self, conn: Any
-    ) -> Tuple[Any, Dict[str, int]]:
+    def _ensure_station_map(self, conn: Any) -> Dict[str, int]:
         """
         Load station mapping, bootstrapping default stations if DB is empty.
 
-        If no stations exist in the database, loads defaults via DimensionalLoader
-        and reopens the connection.
+        If no stations exist in the database, loads defaults via DimensionalLoader.
+        The DimensionalLoader commits on its own connection, and PostgreSQL
+        READ COMMITTED isolation ensures this connection sees those changes.
 
         Args:
             conn: Active database connection
 
         Returns:
-            Tuple of (connection, station_map) — connection may be replaced
+            Dictionary mapping station_id to database id
         """
         station_map = self.get_station_id_mapping(conn)
 
@@ -975,14 +946,12 @@ class Loader(BaseETLLogger):
             self.logger.warning(
                 "No AEMET stations found in DB. Loading default stations first..."
             )
-            return_db_connection(conn)
             dim_loader = DimensionalLoader()
             dim_loader.load_dim_aemet_stations()
-            conn = self.get_db_connection()
             station_map = self.get_station_id_mapping(conn)
             self.logger.info(f"After loading defaults: {len(station_map)} stations")
 
-        return conn, station_map
+        return station_map
 
     def _map_aemet_record(
         self,
@@ -1100,60 +1069,57 @@ class Loader(BaseETLLogger):
             Number of records inserted
         """
         self.log_start("Loading fct_aemet_daily_weather")
-        conn = self.get_db_connection()
 
-        try:
-            conn, station_map = self._ensure_station_map(conn)
-
-            if station_map:
-                self.logger.info(f"Station map loaded: {len(station_map)} stations")
-                self.logger.info(f"Sample station IDs in DB: {list(station_map.keys())[:5]}")
-
-            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-            extraction_date_id = self.get_date_id(execution_date) or 0
-
-            # Try climatology/daily path
-            silver_path = f"climatology/daily/{execution_date}/"
+        with self.connection() as conn:
             try:
-                objects = self.minio_client.client.list_objects(
-                    SILVER_AEMET_BUCKET, prefix=silver_path
-                )
-                parquet_files = [
-                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                ]
-            except Exception:
-                parquet_files = []
+                station_map = self._ensure_station_map(conn)
 
-            if not parquet_files:
-                self.logger.warning(f"No AEMET daily files found for {execution_date}")
-                return 0
+                if station_map:
+                    self.logger.info(f"Station map loaded: {len(station_map)} stations")
+                    self.logger.info(f"Sample station IDs in DB: {list(station_map.keys())[:5]}")
 
-            latest_file = sorted(parquet_files)[-1]
-            self.logger.info(f"Reading parquet file: {latest_file}")
-            df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
-            self.logger.info(f"DataFrame loaded: {len(df)} rows, columns: {df.columns.tolist()}")
+                execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+                extraction_date_id = self.get_date_id(execution_date) or 0
 
-            if "station_id" in df.columns:
-                unique_stations = df["station_id"].unique().tolist()
-                self.logger.info(f"Station IDs in parquet: {unique_stations[:5]}")
+                # Try climatology/daily path
+                silver_path = f"climatology/daily/{execution_date}/"
+                try:
+                    objects = self.minio_client.client.list_objects(
+                        SILVER_AEMET_BUCKET, prefix=silver_path
+                    )
+                    parquet_files = [
+                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                    ]
+                except Exception:
+                    parquet_files = []
 
-            records = self._build_aemet_records(df, station_map, extraction_date_id)
+                if not parquet_files:
+                    self.logger.warning(f"No AEMET daily files found for {execution_date}")
+                    return 0
 
-            if not records:
-                self.logger.warning("No valid records to insert (all stations unknown)")
-                return 0
+                latest_file = sorted(parquet_files)[-1]
+                self.logger.info(f"Reading parquet file: {latest_file}")
+                df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, latest_file)
+                self.logger.info(f"DataFrame loaded: {len(df)} rows, columns: {df.columns.tolist()}")
 
-            self.logger.info(f"Preparing to insert {len(records)} records")
-            rowcount = self._insert_aemet_records(conn, records)
-            self.log_end(f"Inserted {rowcount} AEMET daily records")
-            return rowcount
+                if "station_id" in df.columns:
+                    unique_stations = df["station_id"].unique().tolist()
+                    self.logger.info(f"Station IDs in parquet: {unique_stations[:5]}")
 
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading AEMET daily", e)
-            raise
-        finally:
-            return_db_connection(conn)
+                records = self._build_aemet_records(df, station_map, extraction_date_id)
+
+                if not records:
+                    self.logger.warning("No valid records to insert (all stations unknown)")
+                    return 0
+
+                self.logger.info(f"Preparing to insert {len(records)} records")
+                rowcount = self._insert_aemet_records(conn, records)
+                self.log_end(f"Inserted {rowcount} AEMET daily records")
+                return rowcount
+
+            except Exception as e:
+                self.log_error("Error loading AEMET daily", e)
+                raise
 
     def load_fact_aemet_historical(self, **context: Any) -> int:
         """
@@ -1168,52 +1134,49 @@ class Loader(BaseETLLogger):
             Number of records inserted
         """
         self.log_start("Loading AEMET Historical data")
-        conn = self.get_db_connection()
 
-        try:
-            conn, station_map = self._ensure_station_map(conn)
-
-            execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-            extraction_date_id = self.get_date_id(execution_date) or 0
-
-            # Scan all historical files
-            silver_path = "historical/"
+        with self.connection() as conn:
             try:
-                objects = list(
-                    self.minio_client.client.list_objects(
-                        SILVER_AEMET_BUCKET, prefix=silver_path, recursive=True
-                    )
-                )
-                parquet_files = [
-                    obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                ]
-            except Exception:
-                parquet_files = []
+                station_map = self._ensure_station_map(conn)
 
-            if not parquet_files:
-                self.logger.warning("No AEMET historical files found")
-                return 0
+                execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+                extraction_date_id = self.get_date_id(execution_date) or 0
 
-            total_inserted = 0
-
-            for parquet_file in parquet_files:
+                # Scan all historical files
+                silver_path = "historical/"
                 try:
-                    df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, parquet_file)
-                    records = self._build_aemet_records(df, station_map, extraction_date_id)
+                    objects = list(
+                        self.minio_client.client.list_objects(
+                            SILVER_AEMET_BUCKET, prefix=silver_path, recursive=True
+                        )
+                    )
+                    parquet_files = [
+                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+                    ]
+                except Exception:
+                    parquet_files = []
 
-                    if records:
-                        total_inserted += self._insert_aemet_records(conn, records)
+                if not parquet_files:
+                    self.logger.warning("No AEMET historical files found")
+                    return 0
 
-                except Exception as e:
-                    self.log_error(f"Error loading {parquet_file}", e)
-                    continue
+                total_inserted = 0
 
-            self.log_end(f"Inserted {total_inserted} AEMET historical records")
-            return total_inserted
+                for parquet_file in parquet_files:
+                    try:
+                        df = self.minio_client.read_parquet(SILVER_AEMET_BUCKET, parquet_file)
+                        records = self._build_aemet_records(df, station_map, extraction_date_id)
 
-        except Exception as e:
-            conn.rollback()
-            self.log_error("Error loading AEMET historical", e)
-            raise
-        finally:
-            return_db_connection(conn)
+                        if records:
+                            total_inserted += self._insert_aemet_records(conn, records)
+
+                    except Exception as e:
+                        self.log_error(f"Error loading {parquet_file}", e)
+                        continue
+
+                self.log_end(f"Inserted {total_inserted} AEMET historical records")
+                return total_inserted
+
+            except Exception as e:
+                self.log_error("Error loading AEMET historical", e)
+                raise

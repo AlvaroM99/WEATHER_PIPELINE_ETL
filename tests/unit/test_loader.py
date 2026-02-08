@@ -10,15 +10,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.config.db_pool import reset_pool
 from src.loader import Loader
 from src.utils.minio_client import reset_minio_client
 
 
 @pytest.fixture(autouse=True)
-def reset_minio_singleton():
-    """Reset MinIO singleton before and after each test."""
+def reset_singletons():
+    """Reset singletons before and after each test."""
+    reset_pool()
     reset_minio_client()
     yield
+    reset_pool()
     reset_minio_client()
 
 
@@ -122,20 +125,17 @@ def test_get_city_id_mapping(mock_connect, mock_get_minio_client, mock_db_connec
 @pytest.mark.unit
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
-def test_get_db_connection(mock_connect, mock_get_minio_client):
-    """Test database connection creation"""
+def test_connection_context_manager(mock_connect, mock_get_minio_client):
+    """Test connection() context manager provides a connection"""
     mock_minio_instance = Mock()
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_conn = Mock()
+    mock_conn = MagicMock()
     mock_connect.return_value = mock_conn
 
     loader = Loader()
-    conn = loader.get_db_connection()
-
-    # Assert
-    assert conn is not None
-    mock_connect.assert_called_once()
+    with loader.connection() as conn:
+        assert conn is not None
 
 
 # ===== Fact Observation Loading Tests =====
@@ -549,7 +549,7 @@ def test_loader_logging(mock_connect, mock_get_minio_client, mock_db_connection,
 
 
 @pytest.mark.unit
-@patch("src.loader.return_db_connection")
+@patch("src.base_loader.return_db_connection")
 @patch("src.loader.get_minio_client")
 @patch("src.loader.psycopg2.connect")
 def test_connection_returned_to_pool_on_success(
@@ -569,16 +569,16 @@ def test_connection_returned_to_pool_on_success(
 
     result = loader.load_fact_observation(ds="2026-01-29")
 
-    # Assert - connection was returned to the pool
+    # Assert - connection was returned to the pool via context manager
     mock_return_conn.assert_called()
 
 
 @pytest.mark.unit
-@patch("src.loader.return_db_connection")
+@patch("src.base_loader.return_db_connection")
+@patch("src.base_loader.get_db_connection")
 @patch("src.loader.get_minio_client")
-@patch("src.loader.psycopg2.connect")
 def test_connection_returned_to_pool_on_error(
-    mock_connect, mock_get_minio_client, mock_return_conn, mock_db_connection
+    mock_get_minio_client, mock_get_conn, mock_return_conn, mock_db_connection
 ):
     """Test database connection is returned to pool even on error"""
     mock_minio_instance = Mock()
@@ -587,13 +587,16 @@ def test_connection_returned_to_pool_on_error(
     mock_cursor = Mock()
     mock_cursor.fetchall.side_effect = Exception("Query error")
     mock_db_connection.cursor.return_value = mock_cursor
-    mock_connect.return_value = mock_db_connection
+    mock_get_conn.return_value = mock_db_connection
 
     loader = Loader()
 
     with pytest.raises(Exception):
-        conn = loader.get_db_connection()
-        loader.get_city_id_mapping(conn)
+        with loader.connection() as conn:
+            loader.get_city_id_mapping(conn)
+
+    # Assert - connection was returned to the pool despite error
+    mock_return_conn.assert_called()
 
 
 # ===== Additional Loader Tests =====

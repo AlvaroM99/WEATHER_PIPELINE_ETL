@@ -77,3 +77,11 @@ def return_db_connection(conn: psycopg2.extensions.connection) -> None:
     """
     pool = _get_pool()
     pool.putconn(conn)
+
+
+def reset_pool() -> None:
+    """Reset the connection pool. For testing only."""
+    global _pool
+    if _pool is not None and not _pool.closed:
+        _pool.closeall()
+    _pool = None
