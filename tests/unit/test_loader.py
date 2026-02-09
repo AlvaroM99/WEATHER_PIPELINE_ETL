@@ -1172,3 +1172,158 @@ def test_loader_get_validation_result(mock_get_minio_client):
     result = loader.get_validation_result("unknown_table")
 
     assert result is None
+
+
+# ===== Idempotency Tests =====
+
+
+class TestIdempotency:
+    """Verify ON CONFLICT DO NOTHING ensures idempotent inserts."""
+
+    @pytest.mark.unit
+    @patch("src.loader.execute_values")
+    @patch("src.loader.get_minio_client")
+    @patch("src.loader.psycopg2.connect")
+    def test_load_fact_observation_idempotent(
+        self, mock_connect, mock_get_minio_client, mock_execute_values,
+        mock_db_connection, sample_transformed_df,
+    ):
+        """Calling load_fact_observation twice with same data should not error."""
+        mock_minio_instance = Mock()
+        mock_minio_instance.read_parquet.return_value = sample_transformed_df
+        mock_get_minio_client.return_value = mock_minio_instance
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__.return_value = mock_cursor
+        mock_cursor.rowcount = len(sample_transformed_df)
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.side_effect = [
+            [("Madrid", 1)], [("28079", 1)],
+            [("Madrid", 1)], [("28079", 1)],
+        ]
+        mock_db_connection.cursor.return_value = mock_cursor
+        mock_connect.return_value = mock_db_connection
+
+        loader = Loader()
+
+        # First call
+        result1 = loader.load_fact_observation(ds="2026-01-29")
+        # Second call (DB returns 0 because ON CONFLICT DO NOTHING)
+        mock_cursor.rowcount = 0
+        result2 = loader.load_fact_observation(ds="2026-01-29")
+
+        assert result1 > 0
+        assert result2 == 0
+        assert mock_execute_values.call_count == 2
+
+    @pytest.mark.unit
+    @patch("src.loader.execute_values")
+    @patch("src.loader.get_minio_client")
+    @patch("src.loader.psycopg2.connect")
+    def test_insert_query_contains_on_conflict(
+        self, mock_connect, mock_get_minio_client, mock_execute_values,
+        mock_db_connection, sample_transformed_df,
+    ):
+        """Verify the INSERT query used contains ON CONFLICT clause."""
+        mock_minio_instance = Mock()
+        mock_minio_instance.read_parquet.return_value = sample_transformed_df
+        mock_get_minio_client.return_value = mock_minio_instance
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__.return_value = mock_cursor
+        mock_cursor.rowcount = 1
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
+        mock_db_connection.cursor.return_value = mock_cursor
+        mock_connect.return_value = mock_db_connection
+
+        loader = Loader()
+        loader.load_fact_observation(ds="2026-01-29")
+
+        # Verify execute_values was called with ON CONFLICT
+        call_args = mock_execute_values.call_args
+        sql_query = call_args[0][1]
+        assert "ON CONFLICT" in sql_query
+
+
+# ===== SQL Injection Safety Tests =====
+
+
+class TestSQLInjectionSafety:
+    """Verify parameterized queries protect against SQL injection."""
+
+    @pytest.mark.unit
+    @patch("src.loader.execute_values")
+    @patch("src.loader.get_minio_client")
+    @patch("src.loader.psycopg2.connect")
+    def test_malicious_city_name_is_parameterized(
+        self, mock_connect, mock_get_minio_client, mock_execute_values,
+        mock_db_connection,
+    ):
+        """City names with SQL injection strings are safely handled via parameterized queries."""
+        mock_minio_instance = Mock()
+        malicious_df = pd.DataFrame([{
+            "city": "'; DROP TABLE dwh.dim_city; --",
+            "temperature": 25.5,
+            "humidity": 60,
+            "dt": 1706543400,
+            "date": "2026-01-29",
+        }])
+        mock_minio_instance.read_parquet.return_value = malicious_df
+        mock_get_minio_client.return_value = mock_minio_instance
+
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__.return_value = mock_cursor
+        mock_cursor.rowcount = 1
+        mock_cursor.fetchone.return_value = (1,)
+        # Malicious city IS in the mapping (simulating it got inserted somehow)
+        mock_cursor.fetchall.side_effect = [
+            [("'; DROP TABLE dwh.dim_city; --", 99)],
+            [("99999", 99)],
+        ]
+        mock_db_connection.cursor.return_value = mock_cursor
+        mock_connect.return_value = mock_db_connection
+
+        loader = Loader()
+        result = loader.load_fact_observation(ds="2026-01-29")
+
+        assert result >= 0
+        # Verify execute_values was called (parameterized, not string interpolation)
+        assert mock_execute_values.called
+        sql_query = mock_execute_values.call_args[0][1]
+        assert "DROP TABLE" not in sql_query
+
+
+# ===== Permission Error Tests =====
+
+
+class TestPermissionErrors:
+    """Test proper handling of database permission errors."""
+
+    @pytest.mark.unit
+    @patch("src.loader.get_minio_client")
+    @patch("src.base_loader.get_db_connection")
+    @patch("src.base_loader.return_db_connection")
+    def test_insufficient_privilege_propagates(
+        self, mock_return_conn, mock_get_conn, mock_get_minio_client,
+    ):
+        """InsufficientPrivilege error should propagate properly."""
+        mock_minio_instance = Mock()
+        mock_get_minio_client.return_value = mock_minio_instance
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__.return_value = mock_cursor
+        mock_cursor.execute.side_effect = PermissionError(
+            "permission denied for table fct_weather_observation"
+        )
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        loader = Loader()
+
+        with pytest.raises(Exception):
+            loader.load_fact_observation(ds="2026-01-29")
+
+        # Connection should still be returned to pool
+        mock_return_conn.assert_called_once_with(mock_conn)

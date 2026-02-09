@@ -99,19 +99,21 @@ class TestLoadDimDate:
 class TestLoadDimCity:
     """Test load_dim_city method."""
 
-    @patch("src.dimensional_loader.requests.get")
+    @patch("src.dimensional_loader.get_retrying_session")
     @patch("src.dimensional_loader.DimensionalLoader.connection")
-    def test_load_dim_city_success(self, mock_connection, mock_requests_get):
+    def test_load_dim_city_success(self, mock_connection, mock_get_session):
         """Test successful loading of dim_city from GitHub CSV."""
-        # Mock CSV response
+        # Mock CSV response via retry session
         csv_content = """city_code,city_name,latitud,longitud,country_code,is_coastal
 28079,Madrid,40.4168,-3.7038,ES,0
 08019,Barcelona,41.3851,2.1734,ES,1"""
 
+        mock_session = Mock()
         mock_response = Mock()
         mock_response.text = csv_content
         mock_response.raise_for_status = Mock()
-        mock_requests_get.return_value = mock_response
+        mock_session.get.return_value = mock_response
+        mock_get_session.return_value = mock_session
 
         # Mock database connection
         mock_conn = MagicMock()
@@ -125,8 +127,8 @@ class TestLoadDimCity:
         loader = DimensionalLoader()
         loader.load_dim_city()
 
-        # Verify CSV was downloaded
-        mock_requests_get.assert_called_once()
+        # Verify CSV was downloaded via session
+        mock_session.get.assert_called_once()
 
         # Verify 2 cities were inserted
         assert mock_cursor.execute.call_count == 2
@@ -134,18 +136,20 @@ class TestLoadDimCity:
         # Verify cursor was closed
         mock_cursor.__enter__.assert_called()
 
-    @patch("src.dimensional_loader.requests.get")
+    @patch("src.dimensional_loader.get_retrying_session")
     @patch("src.dimensional_loader.DimensionalLoader.connection")
-    def test_load_dim_city_missing_columns(self, mock_connection, mock_requests_get):
+    def test_load_dim_city_missing_columns(self, mock_connection, mock_get_session):
         """Test error handling when CSV has missing columns."""
         # Mock CSV with missing columns
         csv_content = """city_code,city_name
 28079,Madrid"""
 
+        mock_session = Mock()
         mock_response = Mock()
         mock_response.text = csv_content
         mock_response.raise_for_status = Mock()
-        mock_requests_get.return_value = mock_response
+        mock_session.get.return_value = mock_response
+        mock_get_session.return_value = mock_session
 
         # Mock database connection
         mock_conn = MagicMock()
@@ -164,12 +168,14 @@ class TestLoadDimCity:
         # Verify cursor was closed
         mock_cursor.__enter__.assert_called()
 
-    @patch("src.dimensional_loader.requests.get")
+    @patch("src.dimensional_loader.get_retrying_session")
     @patch("src.dimensional_loader.DimensionalLoader.connection")
-    def test_load_dim_city_request_error(self, mock_connection, mock_requests_get):
+    def test_load_dim_city_request_error(self, mock_connection, mock_get_session):
         """Test error handling when GitHub request fails."""
-        # Mock request exception
-        mock_requests_get.side_effect = requests.RequestException("Network error")
+        # Mock request exception via session
+        mock_session = Mock()
+        mock_session.get.side_effect = requests.RequestException("Network error")
+        mock_get_session.return_value = mock_session
 
         # Mock database connection
         mock_conn = MagicMock()

@@ -14,3 +14,9 @@ faker==21.0.0
 
 # Coverage
 coverage==7.3.3
+
+# E2E Testing with real containers
+testcontainers[postgres]==4.4.0
+
+# Performance benchmarking
+pytest-benchmark==4.0.0
