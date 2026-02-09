@@ -193,6 +193,29 @@ class Loader(BaseLoader):
         """Get a summary of all validation results."""
         return {table: result.to_dict() for table, result in self._last_validation_results.items()}
 
+    def _find_parquet_files(self, bucket: str, prefix: str, recursive: bool = False) -> List[str]:
+        """
+        List parquet files in a MinIO bucket path.
+
+        Args:
+            bucket: MinIO bucket name
+            prefix: Object path prefix
+            recursive: Whether to search recursively
+
+        Returns:
+            Sorted list of parquet file paths, empty list on error
+        """
+        try:
+            objects = self.minio_client.client.list_objects(
+                bucket, prefix=prefix, recursive=recursive
+            )
+            return sorted(
+                obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to list objects in {bucket}/{prefix}: {e}")
+            return []
+
     def get_city_id_mapping(
         self, conn: psycopg2.extensions.connection
     ) -> Tuple[CityIdMapping, CityIdMapping]:
@@ -205,14 +228,13 @@ class Loader(BaseLoader):
         Returns:
             Tuple of (name_map, code_map) dictionaries
         """
-        cur: psycopg2.extensions.cursor = conn.cursor()
-        cur.execute("SELECT city_name, city_id FROM dwh.dim_city")
-        name_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
+        with conn.cursor() as cur:
+            cur.execute("SELECT city_name, city_id FROM dwh.dim_city")
+            name_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
 
-        cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
-        code_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
+            cur.execute("SELECT city_code, city_id FROM dwh.dim_city")
+            code_map: CityIdMapping = {row[0]: row[1] for row in cur.fetchall()}
 
-        cur.close()
         return name_map, code_map
 
     def get_date_id(self, date_str: Any) -> Optional[int]:
@@ -276,8 +298,12 @@ class Loader(BaseLoader):
                 object_path = SILVER_PATH_TEMPLATE.format(date=execution_date)
                 try:
                     df = self.minio_client.read_parquet(SILVER_OPENWEATHER_BUCKET, object_path)
-                except Exception:
-                    self.logger.warning(f"No data found for {execution_date}")
+                except (FileNotFoundError, OSError, ValueError) as e:
+                    self.logger.info(f"No data found for {execution_date}: {e}")
+                    self.log_etl_end(run_id, 0, conn, status="success")
+                    return 0
+                except Exception as e:
+                    self.logger.warning(f"Unexpected error reading data for {execution_date}: {e}")
                     self.log_etl_end(run_id, 0, conn, status="success")
                     return 0
 
@@ -290,12 +316,13 @@ class Loader(BaseLoader):
                     if not city_id:
                         continue
 
-                    # Handle timestamp - use date if dt not available
-                    obs_timestamp = (
-                        pd.to_datetime(row.get("dt"), unit="s")
-                        if "dt" in row and pd.notna(row.get("dt"))
-                        else datetime.now()
-                    )
+                    # Handle timestamp - skip record if dt not available
+                    if "dt" not in row or pd.isna(row.get("dt")):
+                        self.logger.warning(
+                            f"Skipping record for city '{row.get('city')}': missing timestamp (dt)"
+                        )
+                        continue
+                    obs_timestamp = pd.to_datetime(row.get("dt"), unit="s")
 
                     # Clean all values to convert NaN to None
                     records.append(
@@ -339,12 +366,11 @@ class Loader(BaseLoader):
                     ) VALUES %s ON CONFLICT DO NOTHING
                 """
 
-                cur = conn.cursor()
-                execute_values(cur, insert_query, records)
-                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                with conn.cursor() as cur:
+                    execute_values(cur, insert_query, records)
+                    rowcount: int = cur.rowcount if cur.rowcount is not None else 0
                 self.log_end(f"Inserted {rowcount} records")
-                cur.close()
-                
+
                 # End ETL run logging with success
                 self.log_etl_end(run_id, rowcount, conn, status="success")
                 return rowcount
@@ -352,7 +378,7 @@ class Loader(BaseLoader):
                 # End ETL run logging with failure
                 self.log_etl_end(run_id, 0, conn, status="failed", error_message=str(e))
                 self.log_error("Error loading observation", e)
-                raise
+                raise RuntimeError("Failed to load fct_weather_observation") from e
 
     # ========================================================================
     # Fact Forecast Daily Load
@@ -615,15 +641,7 @@ class Loader(BaseLoader):
                 name_map, _ = self.get_city_id_mapping(conn)
                 silver_path = f"marine/{execution_date}/"
 
-                try:
-                    objects = self.minio_client.client.list_objects(
-                        "silver-openmeteo", prefix=silver_path
-                    )
-                    parquet_files = [
-                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                    ]
-                except Exception:
-                    parquet_files = []
+                parquet_files = self._find_parquet_files("silver-openmeteo", silver_path)
 
                 if not parquet_files:
                     self.logger.warning(f"No marine files found for {execution_date}")
@@ -682,17 +700,15 @@ class Loader(BaseLoader):
                     ON CONFLICT (city_id, forecast_date_id, extraction_date_id) DO NOTHING
                 """
 
-                cur = conn.cursor()
-                execute_values(cur, insert_query, records_with_time)
-
-                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                with conn.cursor() as cur:
+                    execute_values(cur, insert_query, records_with_time)
+                    rowcount: int = cur.rowcount if cur.rowcount is not None else 0
                 self.logger.info(f"Inserted {rowcount} marine records")
-                cur.close()
                 return rowcount
 
             except Exception as e:
                 self.log_error("Error loading marine data", e)
-                raise
+                raise RuntimeError("Failed to load fct_marine") from e
 
     def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""
@@ -760,16 +776,7 @@ class Loader(BaseLoader):
                 name_map, _ = self.get_city_id_mapping(conn)
                 silver_path = prefix_template.format(execution_date=execution_date)
 
-                try:
-                    objects = self.minio_client.client.list_objects(bucket, prefix=silver_path)
-                    parquet_files = [
-                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                    ]
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to list objects in bucket={bucket}, prefix={silver_path}: {e}"
-                    )
-                    parquet_files = []
+                parquet_files = self._find_parquet_files(bucket, silver_path)
 
                 if not parquet_files:
                     self.logger.warning(f"No files found for {execution_date}")
@@ -813,12 +820,10 @@ class Loader(BaseLoader):
                 current_time = datetime.now()
                 records_with_time = [(*rec, current_time) for rec in records]
 
-                cur = conn.cursor()
-                execute_values(cur, insert_query, records_with_time)
+                with conn.cursor() as cur:
+                    execute_values(cur, insert_query, records_with_time)
+                    rowcount: int = cur.rowcount if cur.rowcount is not None else 0
 
-                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-                cur.close()
-                
                 # End ETL run logging with success
                 self.log_etl_end(run_id, rowcount, conn, status="success")
                 return rowcount
@@ -827,7 +832,7 @@ class Loader(BaseLoader):
                 # End ETL run logging with failure
                 self.log_etl_end(run_id, 0, conn, status="failed", error_message=str(e))
                 self.log_error(f"Error in _load_generic for {table_name}", e)
-                raise
+                raise RuntimeError(f"Failed to load {table_name}") from e
 
     # ========================================================================
     # AEMET Load Methods
@@ -843,10 +848,9 @@ class Loader(BaseLoader):
         Returns:
             Dictionary mapping station_id to database id
         """
-        cur: psycopg2.extensions.cursor = conn.cursor()
-        cur.execute("SELECT station_id, id FROM dwh.dim_aemet_stations")
-        station_map: Dict[str, int] = {row[0]: row[1] for row in cur.fetchall()}
-        cur.close()
+        with conn.cursor() as cur:
+            cur.execute("SELECT station_id, id FROM dwh.dim_aemet_stations")
+            station_map: Dict[str, int] = {row[0]: row[1] for row in cur.fetchall()}
         return station_map
 
     def load_aemet_stations(self, **context: Any) -> int:
@@ -869,15 +873,7 @@ class Loader(BaseLoader):
                 execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
                 silver_path = f"stations/{execution_date}/"
 
-                try:
-                    objects = self.minio_client.client.list_objects(
-                        SILVER_AEMET_BUCKET, prefix=silver_path
-                    )
-                    parquet_files = [
-                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                    ]
-                except Exception:
-                    parquet_files = []
+                parquet_files = self._find_parquet_files(SILVER_AEMET_BUCKET, silver_path)
 
                 if not parquet_files:
                     self.logger.warning(
@@ -929,17 +925,15 @@ class Loader(BaseLoader):
                         updated_at = CURRENT_TIMESTAMP
                 """
 
-                cur = conn.cursor()
-                execute_values(cur, insert_query, records)
-
-                rowcount: int = cur.rowcount if cur.rowcount is not None else 0
+                with conn.cursor() as cur:
+                    execute_values(cur, insert_query, records)
+                    rowcount: int = cur.rowcount if cur.rowcount is not None else 0
                 self.log_end(f"Upserted {rowcount} AEMET stations from silver")
-                cur.close()
                 return rowcount
 
             except Exception as e:
                 self.log_error("Error loading AEMET stations", e)
-                raise
+                raise RuntimeError("Failed to load dim_aemet_stations") from e
 
     # Shared INSERT query for AEMET fact table
     _AEMET_INSERT_QUERY = """
@@ -1078,10 +1072,9 @@ class Loader(BaseLoader):
         current_time = datetime.now()
         records_with_time = [(*rec, current_time) for rec in records]
 
-        cur = conn.cursor()
-        execute_values(cur, self._AEMET_INSERT_QUERY, records_with_time)
-        rowcount: int = cur.rowcount if cur.rowcount is not None else 0
-        cur.close()
+        with conn.cursor() as cur:
+            execute_values(cur, self._AEMET_INSERT_QUERY, records_with_time)
+            rowcount: int = cur.rowcount if cur.rowcount is not None else 0
         return rowcount
 
     def load_fact_aemet_daily(self, **context: Any) -> int:
@@ -1109,15 +1102,7 @@ class Loader(BaseLoader):
 
                 # Try climatology/daily path
                 silver_path = f"climatology/daily/{execution_date}/"
-                try:
-                    objects = self.minio_client.client.list_objects(
-                        SILVER_AEMET_BUCKET, prefix=silver_path
-                    )
-                    parquet_files = [
-                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                    ]
-                except Exception:
-                    parquet_files = []
+                parquet_files = self._find_parquet_files(SILVER_AEMET_BUCKET, silver_path)
 
                 if not parquet_files:
                     self.logger.warning(f"No AEMET daily files found for {execution_date}")
@@ -1145,7 +1130,7 @@ class Loader(BaseLoader):
 
             except Exception as e:
                 self.log_error("Error loading AEMET daily", e)
-                raise
+                raise RuntimeError("Failed to load fct_aemet_daily_weather") from e
 
     def load_fact_aemet_historical(self, **context: Any) -> int:
         """
@@ -1170,17 +1155,9 @@ class Loader(BaseLoader):
 
                 # Scan all historical files
                 silver_path = "historical/"
-                try:
-                    objects = list(
-                        self.minio_client.client.list_objects(
-                            SILVER_AEMET_BUCKET, prefix=silver_path, recursive=True
-                        )
-                    )
-                    parquet_files = [
-                        obj.object_name for obj in objects if obj.object_name.endswith(".parquet")
-                    ]
-                except Exception:
-                    parquet_files = []
+                parquet_files = self._find_parquet_files(
+                    SILVER_AEMET_BUCKET, silver_path, recursive=True
+                )
 
                 if not parquet_files:
                     self.logger.warning("No AEMET historical files found")
@@ -1205,4 +1182,4 @@ class Loader(BaseLoader):
 
             except Exception as e:
                 self.log_error("Error loading AEMET historical", e)
-                raise
+                raise RuntimeError("Failed to load AEMET historical data") from e

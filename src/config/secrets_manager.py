@@ -150,28 +150,50 @@ class SecretsManager:
             password: password
             port: 5432
         """
+        source = "environment"
         if self._use_airflow:
             conn = _get_airflow_connection(self.CONN_POSTGRES)
             if conn:
-                return PostgresCredentials(
+                source = "airflow"
+                creds = PostgresCredentials(
                     host=conn.host or "postgres",
                     port=conn.port or 5432,
                     database=conn.schema or "weatherdb",
                     user=conn.login or "",
                     password=conn.password or "",
                 )
+                self._validate_postgres_credentials(creds, source)
+                return creds
             logger.warning(
                 f"Airflow connection '{self.CONN_POSTGRES}' not found, "
                 "falling back to environment variables"
             )
 
-        return PostgresCredentials(
+        creds = PostgresCredentials(
             host=os.getenv("POSTGRES_HOST", "postgres"),
             port=int(os.getenv("POSTGRES_PORT", "5432")),
             database=os.getenv("POSTGRES_DB", "weatherdb"),
             user=os.getenv("POSTGRES_USER", ""),
             password=os.getenv("POSTGRES_PASSWORD", ""),
         )
+        self._validate_postgres_credentials(creds, source)
+        return creds
+
+    @staticmethod
+    def _validate_postgres_credentials(creds: PostgresCredentials, source: str) -> None:
+        """Validate that required PostgreSQL credentials are present."""
+        missing = []
+        if not creds.user:
+            missing.append("user")
+        if not creds.password:
+            missing.append("password")
+        if not creds.database:
+            missing.append("database")
+        if missing:
+            logger.warning(
+                f"PostgreSQL credentials from {source} are incomplete: "
+                f"missing {', '.join(missing)}. Connection may fail."
+            )
 
     def get_minio_credentials(self) -> MinioCredentials:
         """
@@ -185,30 +207,50 @@ class SecretsManager:
             password: secret_key
             extra: {"secure": false}
         """
+        source = "environment"
         if self._use_airflow:
             conn = _get_airflow_connection(self.CONN_MINIO)
             if conn:
+                source = "airflow"
                 extra = conn.extra_dejson if conn.extra else {}
                 endpoint = conn.host or "minio:9000"
                 if conn.port:
                     endpoint = f"{conn.host}:{conn.port}"
-                return MinioCredentials(
+                creds = MinioCredentials(
                     endpoint=endpoint,
                     access_key=conn.login or "",
                     secret_key=conn.password or "",
                     secure=extra.get("secure", False),
                 )
+                self._validate_minio_credentials(creds, source)
+                return creds
             logger.warning(
                 f"Airflow connection '{self.CONN_MINIO}' not found, "
                 "falling back to environment variables"
             )
 
-        return MinioCredentials(
+        creds = MinioCredentials(
             endpoint=os.getenv("MINIO_ENDPOINT", "minio:9000"),
             access_key=os.getenv("MINIO_ROOT_USER", ""),
             secret_key=os.getenv("MINIO_ROOT_PASSWORD", ""),
             secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
         )
+        self._validate_minio_credentials(creds, source)
+        return creds
+
+    @staticmethod
+    def _validate_minio_credentials(creds: MinioCredentials, source: str) -> None:
+        """Validate that required MinIO credentials are present."""
+        missing = []
+        if not creds.access_key:
+            missing.append("access_key")
+        if not creds.secret_key:
+            missing.append("secret_key")
+        if missing:
+            logger.warning(
+                f"MinIO credentials from {source} are incomplete: "
+                f"missing {', '.join(missing)}. Connection may fail."
+            )
 
     def get_openweather_api_key(self) -> Optional[str]:
         """

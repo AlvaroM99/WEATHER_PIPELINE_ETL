@@ -26,7 +26,7 @@ jobs:
       - name: Install linting dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install black flake8 isort mypy pandas-stubs types-requests
+          pip install black isort ruff mypy bandit pandas-stubs types-requests
 
       - name: Check code formatting with Black
         run: |
@@ -36,14 +36,17 @@ jobs:
         run: |
           isort --check-only --diff src/ tests/ dags/
 
-      - name: Lint with flake8
+      - name: Lint with Ruff
         run: |
-          flake8 src/ tests/ dags/ --count --statistics --ignore=E402,E501,F401,F541,F811,F841,W291,W293,W503
+          ruff check src/ tests/ dags/
 
       - name: Type check with mypy
         run: |
-          mypy src/ dags/ --ignore-missing-imports --no-error-summary
-        continue-on-error: true  # Type checking advisory initially
+          mypy src/ --ignore-missing-imports --no-error-summary
+
+      - name: Security scan with Bandit
+        run: |
+          bandit -r src/ -ll --skip B101,B311
 
   test:
     name: Tests
@@ -100,7 +103,6 @@ jobs:
           POSTGRES_USER: weather_user
           POSTGRES_PASSWORD: weather_pass
           POSTGRES_DB: weather_db
-        continue-on-error: true  # Integration tests may need external services
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
@@ -160,7 +162,6 @@ jobs:
       - name: Run data quality tests
         run: |
           pytest tests/ -v -k "data_quality or quality or validation" --no-cov
-        continue-on-error: true
 
   build-check:
     name: Build Verification

@@ -6,7 +6,7 @@ for schema, ranges, and completeness.
 """
 
 import logging
-from typing import Dict
+from typing import Any, Dict
 
 import pandas as pd
 
@@ -139,7 +139,12 @@ MARINE_CONFIG = {
 
 
 def _run_validation(
-    df: pd.DataFrame, suite_name: str, config: Dict[str, Any], strict_mode: bool = False
+    df: pd.DataFrame,
+    suite_name: str,
+    config: Dict[str, Any],
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
 ) -> ValidationResult:
     """
     Run validation against a DataFrame using the specified configuration.
@@ -149,11 +154,22 @@ def _run_validation(
         suite_name: Name of the expectation suite
         config: Configuration dictionary
         strict_mode: If True, raise exception on failure
+        completeness_threshold: Override for minimum completeness (0.0-1.0).
+                                Falls back to config value, then 0.95.
+        mostly: Override for range-check tolerance (0.0-1.0).
+                Falls back to 0.99 (allow 1% outliers).
 
     Returns:
         ValidationResult with detailed results
     """
     validator = DataQualityValidator(strict_mode=strict_mode)
+
+    effective_completeness = (
+        completeness_threshold
+        if completeness_threshold is not None
+        else config.get("completeness_threshold", 0.95)
+    )
+    effective_mostly = mostly if mostly is not None else 0.99
 
     result = validator.run_validation(
         df=df,
@@ -161,8 +177,8 @@ def _run_validation(
         required_columns=config["required_columns"],
         numeric_ranges=config.get("numeric_ranges"),
         completeness_columns=config.get("critical_columns"),
-        completeness_threshold=config.get("completeness_threshold", 0.95),
-        mostly=0.99,  # Allow 1% outliers for range checks
+        completeness_threshold=effective_completeness,
+        mostly=effective_mostly,
     )
 
     # Log summary
@@ -185,21 +201,20 @@ def _run_validation(
 # =============================================================================
 
 
-def validate_weather_observation(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_weather_observation(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate weather observation data (OpenWeather current conditions).
-
-    Checks:
-    - Required columns exist: city, temperature, humidity, pressure
-    - Temperature between -60 and 60 C
-    - Humidity between 0 and 100%
-    - Pressure between 870 and 1084 hPa
-    - Wind speed between 0 and 120 m/s
-    - Critical columns have >90% completeness
 
     Args:
         df: DataFrame with weather observation data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
@@ -209,46 +224,53 @@ def validate_weather_observation(df: pd.DataFrame, strict_mode: bool = False) ->
         suite_name="weather_observation_suite",
         config=WEATHER_OBSERVATION_CONFIG,
         strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
-def validate_daily_forecast(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_daily_forecast(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate daily weather forecast data (Open-Meteo daily).
-
-    Checks:
-    - Required columns exist: city_name, time, temperature_2m_max, temperature_2m_min
-    - Temperature ranges valid
-    - Precipitation values non-negative
-    - Wind speeds reasonable
-    - Weather codes within WMO range (0-99)
 
     Args:
         df: DataFrame with daily forecast data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
     """
     return _run_validation(
-        df, suite_name="daily_forecast_suite", config=DAILY_FORECAST_CONFIG, strict_mode=strict_mode
+        df,
+        suite_name="daily_forecast_suite",
+        config=DAILY_FORECAST_CONFIG,
+        strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
-def validate_hourly_forecast(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_hourly_forecast(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate hourly weather forecast data (Open-Meteo hourly).
-
-    Checks:
-    - Required columns exist: city_name, time, temperature_2m
-    - Temperature values within physical limits
-    - Relative humidity 0-100%
-    - Precipitation probability 0-100%
-    - UV index 0-15
 
     Args:
         df: DataFrame with hourly forecast data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
@@ -258,71 +280,92 @@ def validate_hourly_forecast(df: pd.DataFrame, strict_mode: bool = False) -> Val
         suite_name="hourly_forecast_suite",
         config=HOURLY_FORECAST_CONFIG,
         strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
-def validate_air_quality(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_air_quality(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate air quality data.
-
-    Checks:
-    - Required columns exist: city_name, time
-    - PM10 and PM2.5 within sensor limits
-    - Gas concentrations within expected ranges
-    - Aerosol optical depth reasonable
 
     Args:
         df: DataFrame with air quality data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
     """
     return _run_validation(
-        df, suite_name="air_quality_suite", config=AIR_QUALITY_CONFIG, strict_mode=strict_mode
+        df,
+        suite_name="air_quality_suite",
+        config=AIR_QUALITY_CONFIG,
+        strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
-def validate_pollen(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_pollen(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate pollen data.
-
-    Checks:
-    - Required columns exist: city_name, time
-    - Pollen counts non-negative
-    - Pollen counts within reasonable maximums
 
     Args:
         df: DataFrame with pollen data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
     """
     return _run_validation(
-        df, suite_name="pollen_suite", config=POLLEN_CONFIG, strict_mode=strict_mode
+        df,
+        suite_name="pollen_suite",
+        config=POLLEN_CONFIG,
+        strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
-def validate_marine(df: pd.DataFrame, strict_mode: bool = False) -> ValidationResult:
+def validate_marine(
+    df: pd.DataFrame,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
+) -> ValidationResult:
     """
     Validate marine weather data.
-
-    Checks:
-    - Required columns exist: city_name, time
-    - Wave heights within physical limits
-    - Wave direction 0-360 degrees
-    - Wave period reasonable
 
     Args:
         df: DataFrame with marine weather data
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
     """
     return _run_validation(
-        df, suite_name="marine_suite", config=MARINE_CONFIG, strict_mode=strict_mode
+        df,
+        suite_name="marine_suite",
+        config=MARINE_CONFIG,
+        strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
     )
 
 
@@ -332,7 +375,11 @@ def validate_marine(df: pd.DataFrame, strict_mode: bool = False) -> ValidationRe
 
 
 def validate_dataframe(
-    df: pd.DataFrame, data_type: str, strict_mode: bool = False
+    df: pd.DataFrame,
+    data_type: str,
+    strict_mode: bool = False,
+    completeness_threshold: float | None = None,
+    mostly: float | None = None,
 ) -> ValidationResult:
     """
     Validate a DataFrame based on its data type.
@@ -342,6 +389,8 @@ def validate_dataframe(
         data_type: One of 'observation', 'daily_forecast', 'hourly_forecast',
                    'air_quality', 'pollen', 'marine'
         strict_mode: If True, raise exception on validation failure
+        completeness_threshold: Override minimum completeness (0.0-1.0)
+        mostly: Override range-check tolerance (0.0-1.0)
 
     Returns:
         ValidationResult with detailed validation results
@@ -361,4 +410,9 @@ def validate_dataframe(
     if data_type not in validators:
         raise ValueError(f"Unknown data type: {data_type}. Valid types: {list(validators.keys())}")
 
-    return validators[data_type](df, strict_mode=strict_mode)
+    return validators[data_type](
+        df,
+        strict_mode=strict_mode,
+        completeness_threshold=completeness_threshold,
+        mostly=mostly,
+    )

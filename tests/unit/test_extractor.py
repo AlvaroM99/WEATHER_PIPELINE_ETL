@@ -21,6 +21,22 @@ def reset_minio_singleton():
     reset_minio_client()
 
 
+@pytest.fixture(autouse=True)
+def mock_db_pool_for_extractor():
+    """Mock get_db_connection / return_db_connection and log_to_lake_metadata
+    so extractor tests never attempt a real PostgreSQL connection."""
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+
+    with patch("src.config.db_pool.get_db_connection", return_value=mock_conn), \
+         patch("src.config.db_pool.return_db_connection"), \
+         patch.object(Extractor, "log_to_lake_metadata", create=True):
+        yield mock_conn
+
+
 # ===== OpenWeather Tests =====
 
 

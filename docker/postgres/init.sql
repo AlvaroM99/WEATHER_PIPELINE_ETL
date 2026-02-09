@@ -36,17 +36,20 @@ COMMENT ON TABLE weather IS 'Stores daily weather data from OpenWeatherMap API';
 -- Table to track data lineage from lake to DWH
 CREATE TABLE IF NOT EXISTS lake_metadata (
     id SERIAL PRIMARY KEY,
-    layer VARCHAR(20) NOT NULL,  -- 'bronze' or 'silver'
+    bucket_name VARCHAR(100) NOT NULL,
     object_path TEXT NOT NULL,
-    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    layer VARCHAR(20) NOT NULL,  -- 'bronze' or 'silver'
+    data_source VARCHAR(50) NOT NULL,  -- 'openweather', 'openmeteo', 'aemet'
     record_count INTEGER,
     file_size_bytes BIGINT,
-    status VARCHAR(20) DEFAULT 'loaded',  -- 'loaded', 'processed', 'failed'
+    status VARCHAR(20) DEFAULT 'success',
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(object_path)
 );
 
 -- Create indexes for faster queries on metadata
 CREATE INDEX IF NOT EXISTS idx_lake_metadata_layer ON lake_metadata(layer);
+CREATE INDEX IF NOT EXISTS idx_lake_metadata_data_source ON lake_metadata(data_source);
 CREATE INDEX IF NOT EXISTS idx_lake_metadata_timestamp ON lake_metadata(load_timestamp);
 CREATE INDEX IF NOT EXISTS idx_lake_metadata_status ON lake_metadata(status);
 
@@ -70,6 +73,3 @@ COMMENT ON TABLE lake_metadata IS 'Tracks data lineage and metadata for files in
 \i /docker-entrypoint-initdb.d/init-etl-audit.sql
 
 \echo 'Database initialization complete!'
-
--- Create schema
-CREATE SCHEMA IF NOT EXISTS dwh;

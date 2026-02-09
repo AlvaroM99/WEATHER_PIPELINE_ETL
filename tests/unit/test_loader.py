@@ -92,7 +92,8 @@ def test_get_city_id_mapping(mock_connect, mock_get_minio_client, mock_db_connec
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mock
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
 
     # Mock fetchall for name mapping
     mock_cursor.fetchall.side_effect = [
@@ -159,8 +160,10 @@ def test_load_fact_observation_success(
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = len(sample_transformed_df)
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]  # name_map  # code_map
 
     mock_db_connection.cursor.return_value = mock_cursor
@@ -194,7 +197,9 @@ def test_load_fact_observation_city_not_found(
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [
         [("Barcelona", 2)],  # name_map - Madrid not included
         [("08019", 2)],  # code_map
@@ -251,7 +256,9 @@ def test_load_fact_observation_rollback_on_error(
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_cursor.execute.side_effect = Exception("Database error")
 
@@ -295,8 +302,10 @@ def test_load_generic_success(
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = len(sample_silver_parquet_df)
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [
         [("Madrid", 1), ("Barcelona", 2)],  # name_map
         [("28079", 1), ("08019", 2)],  # code_map
@@ -344,8 +353,10 @@ def test_load_generic_deduplication(
     mock_get_minio_client.return_value = mock_minio_instance
 
     # Setup DB mocks
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2  # Only 2 unique rows
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
 
     mock_db_connection.cursor.return_value = mock_cursor
@@ -560,7 +571,9 @@ def test_connection_returned_to_pool_on_success(
     mock_minio_instance.read_parquet.side_effect = Exception("No file")
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -584,7 +597,8 @@ def test_connection_returned_to_pool_on_error(
     mock_minio_instance = Mock()
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.fetchall.side_effect = Exception("Query error")
     mock_db_connection.cursor.return_value = mock_cursor
     mock_get_conn.return_value = mock_db_connection
@@ -631,8 +645,10 @@ def test_load_fact_forecast_hourly(
     mock_minio_instance.read_parquet.return_value = hourly_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -672,8 +688,10 @@ def test_load_fact_air_quality(
     mock_minio_instance.read_parquet.return_value = air_quality_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -711,8 +729,10 @@ def test_load_fact_pollen(
     mock_minio_instance.read_parquet.return_value = pollen_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -749,8 +769,10 @@ def test_load_fact_marine(
     mock_minio_instance.read_parquet.return_value = marine_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Barcelona", 1)], [("08019", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -770,7 +792,9 @@ def test_load_handles_empty_dataframe(mock_connect, mock_get_minio_client, mock_
     mock_minio_instance.read_parquet.return_value = pd.DataFrame()
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -800,7 +824,9 @@ def test_load_handles_missing_city_mapping(mock_connect, mock_get_minio_client, 
     mock_minio_instance.read_parquet.return_value = df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)  # log_etl_start RETURNING id
     mock_cursor.fetchall.side_effect = [[], []]  # No city mapping
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -871,7 +897,8 @@ def test_get_station_id_mapping(mock_connect, mock_get_minio_client, mock_db_con
     mock_minio_instance = Mock()
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.fetchall.return_value = [("3129", 1), ("0076", 2)]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -906,7 +933,8 @@ def test_load_aemet_stations_success(
     mock_minio_instance.read_parquet.return_value = sample_aemet_silver_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 2
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -965,7 +993,8 @@ def test_load_fact_aemet_daily_success(
     mock_minio_instance.read_parquet.return_value = sample_aemet_daily_silver_df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.rowcount = 1
     # First call for station mapping, second for data load
     mock_cursor.fetchall.return_value = [("3129", 1), ("0076", 2)]
@@ -988,7 +1017,8 @@ def test_load_fact_aemet_daily_no_files(mock_connect, mock_get_minio_client, moc
     mock_minio_instance.client.list_objects.return_value = []
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.fetchall.return_value = [("3129", 1)]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -1016,7 +1046,8 @@ def test_load_fact_aemet_daily_loads_stations_if_missing(
     mock_dim_loader_instance = Mock()
     MockDimensionalLoader.return_value = mock_dim_loader_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     # First call returns empty (no stations), triggers fallback
     mock_cursor.fetchall.return_value = []
     mock_db_connection.cursor.return_value = mock_cursor
@@ -1050,7 +1081,8 @@ def test_load_fact_aemet_daily_skips_unknown_stations(
     mock_minio_instance.read_parquet.return_value = df
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.fetchall.return_value = [("3129", 1)]  # UNKNOWN not in mapping
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection
@@ -1073,7 +1105,8 @@ def test_load_fact_aemet_historical_no_files(
     mock_minio_instance.client.list_objects.return_value = []
     mock_get_minio_client.return_value = mock_minio_instance
 
-    mock_cursor = Mock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
     mock_cursor.fetchall.return_value = [("3129", 1)]
     mock_db_connection.cursor.return_value = mock_cursor
     mock_connect.return_value = mock_db_connection

@@ -224,6 +224,7 @@ def sample_transformed_df():
                 "wind_deg": 180,
                 "clouds": 10,
                 "visibility": 10000,
+                "dt": 1706543400,
                 "date": "2026-01-29",
                 "bronze_source": "current/2026-01-29/madrid_20260129_120000.json",
             }

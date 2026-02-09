@@ -147,30 +147,33 @@ class TestValidateRange:
         df = pd.DataFrame({"temperature": [15.0, 20.0, 25.0, 30.0]})
 
         validator = DataQualityValidator()
-        is_valid, out_of_range = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
+        is_valid, out_of_range, compliance = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
 
         assert is_valid is True
         assert out_of_range == 0
+        assert compliance == 1.0
 
     def test_validate_range_failures(self):
         """Test range validation with out-of-range values."""
         df = pd.DataFrame({"temperature": [5.0, 15.0, 40.0, 25.0]})
 
         validator = DataQualityValidator()
-        is_valid, out_of_range = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
+        is_valid, out_of_range, compliance = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
 
         assert is_valid is False
         assert out_of_range == 2  # 5.0 and 40.0 are out of range
+        assert compliance == 0.5  # 2 out of 4 valid
 
     def test_validate_range_missing_column(self):
         """Test range validation with missing column."""
         df = pd.DataFrame({"other_col": [1, 2, 3]})
 
         validator = DataQualityValidator()
-        is_valid, out_of_range = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
+        is_valid, out_of_range, compliance = validator.validate_range(df, "temperature", min_value=10.0, max_value=35.0)
 
-        assert is_valid is False
+        assert is_valid is True  # Missing column is skipped (returns True)
         assert out_of_range == 0
+        assert compliance == 1.0
 
 
 class TestValidateCompleteness:
@@ -181,7 +184,7 @@ class TestValidateCompleteness:
         df = pd.DataFrame({"col1": [1, 2, 3, 4, 5], "col2": ["a", "b", "c", "d", "e"]})
 
         validator = DataQualityValidator()
-        is_valid, completeness = validator.validate_completeness(df, required_columns=["col1", "col2"], threshold=0.9)
+        is_valid, completeness = validator.validate_completeness(df, columns=["col1", "col2"], threshold=0.9)
 
         assert is_valid is True
         assert completeness["col1"] == 1.0
@@ -192,9 +195,9 @@ class TestValidateCompleteness:
         df = pd.DataFrame({"col1": [1, 2, None, 4, 5], "col2": ["a", None, "c", None, "e"]})
 
         validator = DataQualityValidator()
-        is_valid, completeness = validator.validate_completeness(df, required_columns=["col1", "col2"], threshold=0.7)
+        is_valid, completeness = validator.validate_completeness(df, columns=["col1", "col2"], threshold=0.7)
 
-        assert is_valid is True  # 0.8 and 0.6 average to 0.7
+        assert is_valid is False  # col2 at 0.6 < 0.7 threshold
         assert completeness["col1"] == 0.8  # 4/5
         assert completeness["col2"] == 0.6  # 3/5
 
@@ -203,62 +206,63 @@ class TestValidateCompleteness:
         df = pd.DataFrame({"col1": [1, None, None, None, 5]})
 
         validator = DataQualityValidator()
-        is_valid, completeness = validator.validate_completeness(df, required_columns=["col1"], threshold=0.5)
+        is_valid, completeness = validator.validate_completeness(df, columns=["col1"], threshold=0.5)
 
         assert is_valid is False  # 0.4 < 0.5
         assert completeness["col1"] == 0.4
 
 
-class TestValidateDataFrame:
-    """Test validate_dataframe comprehensive method."""
+class TestRunValidation:
+    """Test run_validation comprehensive method."""
 
-    def test_validate_dataframe_success(self):
+    def test_run_validation_success(self):
         """Test comprehensive DataFrame validation success."""
         df = pd.DataFrame(
             {"temperature": [15.0, 20.0, 25.0], "humidity": [60.0, 65.0, 70.0], "city": ["Madrid", "Barcelona", "Sevilla"]}
         )
 
         validator = DataQualityValidator()
-        result = validator.validate_dataframe(
+        result = validator.run_validation(
             df=df,
             table_name="weather_data",
             required_columns=["temperature", "humidity", "city"],
-            column_types={"temperature": "numeric", "humidity": "numeric", "city": "string"},
-            range_checks={"temperature": (10.0, 35.0), "humidity": (0.0, 100.0)},
+            numeric_ranges={"temperature": (10.0, 35.0), "humidity": (0.0, 100.0)},
+            completeness_columns=["temperature", "humidity", "city"],
             completeness_threshold=0.9,
         )
 
         assert result.success is True
         assert result.failed_expectations == 0
 
-    def test_validate_dataframe_with_failures(self):
+    def test_run_validation_with_failures(self):
         """Test comprehensive DataFrame validation with failures."""
         df = pd.DataFrame({"temperature": [5.0, None, 40.0], "humidity": [60.0, 65.0, 70.0]})
 
         validator = DataQualityValidator()
-        result = validator.validate_dataframe(
+        result = validator.run_validation(
             df=df,
             table_name="weather_data",
             required_columns=["temperature", "humidity"],
-            range_checks={"temperature": (10.0, 35.0)},
+            numeric_ranges={"temperature": (10.0, 35.0)},
+            completeness_columns=["temperature"],
             completeness_threshold=0.9,
         )
 
         assert result.success is False
         assert result.failed_expectations > 0
 
-    def test_validate_dataframe_strict_mode_raises(self):
+    def test_run_validation_strict_mode_raises(self):
         """Test that strict mode raises exception on validation failure."""
         df = pd.DataFrame({"temperature": [5.0, 40.0]})  # Out of range
 
         validator = DataQualityValidator(strict_mode=True)
 
         with pytest.raises(DataQualityException):
-            validator.validate_dataframe(
+            validator.run_validation(
                 df=df,
                 table_name="weather_data",
                 required_columns=["temperature"],
-                range_checks={"temperature": (10.0, 35.0)},
+                numeric_ranges={"temperature": (10.0, 35.0)},
             )
 
 
@@ -270,7 +274,7 @@ class TestEdgeCases:
         df = pd.DataFrame()
 
         validator = DataQualityValidator()
-        result = validator.validate_dataframe(df=df, table_name="empty_table", required_columns=[])
+        result = validator.run_validation(df=df, table_name="empty_table", required_columns=[])
 
         assert result.success is True
 
@@ -279,7 +283,7 @@ class TestEdgeCases:
         df = pd.DataFrame({"col1": [1]})
 
         validator = DataQualityValidator()
-        result = validator.validate_dataframe(df=df, table_name="single_row", required_columns=["col1"])
+        result = validator.run_validation(df=df, table_name="single_row", required_columns=["col1"])
 
         assert result.success is True
 
@@ -288,7 +292,7 @@ class TestEdgeCases:
         df = pd.DataFrame({"col1": [None, None, None]})
 
         validator = DataQualityValidator()
-        is_valid, completeness = validator.validate_completeness(df, required_columns=["col1"], threshold=0.1)
+        is_valid, completeness = validator.validate_completeness(df, columns=["col1"], threshold=0.1)
 
         assert is_valid is False
         assert completeness["col1"] == 0.0

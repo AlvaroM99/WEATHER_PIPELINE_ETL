@@ -80,9 +80,26 @@ class DataQualityMetrics:
     - Detect anomalies in quality trends
     """
 
-    def __init__(self) -> None:
+    # Default dimension weights for overall quality score
+    DEFAULT_WEIGHTS: Dict[str, float] = {
+        "completeness": 0.30,
+        "validity": 0.35,
+        "uniqueness": 0.20,
+        "freshness": 0.15,
+    }
+
+    def __init__(self, weights: Optional[Dict[str, float]] = None) -> None:
+        """
+        Initialize DataQualityMetrics.
+
+        Args:
+            weights: Custom dimension weights for overall score calculation.
+                     Keys: 'completeness', 'validity', 'uniqueness', 'freshness'.
+                     Falls back to DEFAULT_WEIGHTS if not provided.
+        """
         self.logger = logging.getLogger(self.__class__.__name__)
         self._metrics_history: List[QualityMetric] = []
+        self.weights: Dict[str, float] = weights or self.DEFAULT_WEIGHTS.copy()
 
     def calculate_completeness(
         self, df: pd.DataFrame, columns: Optional[List[str]] = None
@@ -310,12 +327,10 @@ class DataQualityMetrics:
             )
 
         # Calculate overall score (weighted average)
-        weights = {"completeness": 0.3, "validity": 0.35, "uniqueness": 0.2, "freshness": 0.15}
-
         overall_score = 0.0
         total_weight = 0.0
         for dim, score in dimension_scores.items():
-            weight = weights.get(dim, 0.25)
+            weight = self.weights.get(dim, 0.25)
             overall_score += score * weight
             total_weight += weight
 

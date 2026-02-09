@@ -148,7 +148,7 @@ addopts = [
     "--cov=src",
     "--cov-report=html:tests/htmlcov",
     "--cov-report=term-missing:skip-covered",
-    "--cov-fail-under=60"
+    "--cov-fail-under=75"
 ]
 markers = [
     "unit: Unit tests (isolated components)",
@@ -192,7 +192,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if typing.TYPE_CHECKING:"
 ]
-fail_under = 60
+fail_under = 75
 show_missing = true
 skip_covered = true
 

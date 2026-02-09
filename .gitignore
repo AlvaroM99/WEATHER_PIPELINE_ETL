@@ -52,3 +52,4 @@ tests/htmlcov/
 
 # Windows artifacts
 nul
+coverage.json

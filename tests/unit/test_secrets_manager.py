@@ -5,6 +5,7 @@ Tests cover all credential retrieval methods to achieve 70%+ coverage.
 """
 
 import os
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -22,34 +23,57 @@ from src.config.secrets_manager import (
 class TestHelperFunctions:
     """Test helper functions."""
 
-    @patch("src.config.secrets_manager.conf")
-    def test_is_airflow_context_true(self, mock_conf):
+    def test_is_airflow_context_true(self):
         """Test _is_airflow_context returns True when in Airflow."""
+        mock_conf = MagicMock()
         mock_conf.get.return_value = "SequentialExecutor"
-        assert _is_airflow_context() is True
+        mock_configuration = MagicMock()
+        mock_configuration.conf = mock_conf
+
+        with patch.dict(sys.modules, {
+            "airflow": MagicMock(),
+            "airflow.configuration": mock_configuration,
+        }):
+            assert _is_airflow_context() is True
 
     def test_is_airflow_context_false(self):
         """Test _is_airflow_context returns False when not in Airflow."""
-        with patch("src.config.secrets_manager.conf", side_effect=ImportError):
-            assert _is_airflow_context() is False
+        # When airflow is not installed or conf.get raises, the function
+        # catches the exception and returns False. Since airflow is not
+        # installed in the test environment, this returns False naturally.
+        assert _is_airflow_context() is False
 
-    @patch("src.config.secrets_manager.BaseHook")
-    def test_get_airflow_connection_success(self, mock_basehook):
+    def test_get_airflow_connection_success(self):
         """Test successful retrieval of Airflow connection."""
         mock_conn = Mock()
+        mock_basehook = MagicMock()
         mock_basehook.get_connection.return_value = mock_conn
+        mock_hooks_base = MagicMock()
+        mock_hooks_base.BaseHook = mock_basehook
 
-        result = _get_airflow_connection("test_conn")
+        with patch.dict(sys.modules, {
+            "airflow": MagicMock(),
+            "airflow.hooks": MagicMock(),
+            "airflow.hooks.base": mock_hooks_base,
+        }):
+            result = _get_airflow_connection("test_conn")
 
         assert result == mock_conn
         mock_basehook.get_connection.assert_called_once_with("test_conn")
 
-    @patch("src.config.secrets_manager.BaseHook")
-    def test_get_airflow_connection_failure(self, mock_basehook):
+    def test_get_airflow_connection_failure(self):
         """Test _get_airflow_connection returns None on error."""
+        mock_basehook = MagicMock()
         mock_basehook.get_connection.side_effect = Exception("Connection not found")
+        mock_hooks_base = MagicMock()
+        mock_hooks_base.BaseHook = mock_basehook
 
-        result = _get_airflow_connection("test_conn")
+        with patch.dict(sys.modules, {
+            "airflow": MagicMock(),
+            "airflow.hooks": MagicMock(),
+            "airflow.hooks.base": mock_hooks_base,
+        }):
+            result = _get_airflow_connection("test_conn")
 
         assert result is None
 
@@ -163,11 +187,11 @@ class TestGetPostgresCredentials:
         manager = SecretsManager()
         creds = manager.get_postgres_credentials()
 
-        assert creds.host == "localhost"
+        assert creds.host == "postgres"
         assert creds.port == 5432
-        assert creds.database == "weather_db"
-        assert creds.user == "postgres"
-        assert creds.password == "postgres"
+        assert creds.database == "weatherdb"
+        assert creds.user == ""
+        assert creds.password == ""
 
 
 class TestGetMinioCredentials:
@@ -180,9 +204,11 @@ class TestGetMinioCredentials:
         mock_is_airflow.return_value = True
 
         mock_conn = Mock()
-        mock_conn.host = "minio.example.com:9000"
+        mock_conn.host = "minio.example.com"
+        mock_conn.port = 9000
         mock_conn.login = "airflow_access"
         mock_conn.password = "airflow_secret"
+        mock_conn.extra = '{"secure": true}'
         mock_conn.extra_dejson = {"secure": True}
         mock_get_conn.return_value = mock_conn
 
@@ -200,8 +226,8 @@ class TestGetMinioCredentials:
         mock_is_airflow.return_value = False
 
         monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
-        monkeypatch.setenv("MINIO_ACCESS_KEY", "env_access")
-        monkeypatch.setenv("MINIO_SECRET_KEY", "env_secret")
+        monkeypatch.setenv("MINIO_ROOT_USER", "env_access")
+        monkeypatch.setenv("MINIO_ROOT_PASSWORD", "env_secret")
         monkeypatch.setenv("MINIO_SECURE", "false")
 
         manager = SecretsManager()

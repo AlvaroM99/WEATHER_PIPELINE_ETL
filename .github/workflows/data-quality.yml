@@ -190,7 +190,6 @@ jobs:
       - name: Run schema validation tests
         run: |
           pytest tests/ -v -k "schema or validation" --tb=short
-        continue-on-error: true
 
       - name: Validate data type configurations
         run: |

@@ -7,8 +7,10 @@ via context manager and standardized logging for all loaders.
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
-from typing import Generator
+from datetime import datetime
+from typing import Any, Dict, Generator, Optional
 
 import psycopg2
 
@@ -72,17 +74,14 @@ class BaseLoader(BaseETLLogger):
         Returns:
             run_id: Primary key of the created etl_run_log entry
         """
-        from datetime import datetime
-
-        cur = conn.cursor()
-        try:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO dwh.etl_run_log (
                     dag_id, task_id, execution_date, start_time, status
                 ) VALUES (%s, %s, %s, %s, 'running')
-                ON CONFLICT (dag_id, task_id, execution_date) 
-                DO UPDATE SET 
+                ON CONFLICT (dag_id, task_id, execution_date)
+                DO UPDATE SET
                     start_time = EXCLUDED.start_time,
                     status = 'running',
                     end_time = NULL,
@@ -93,11 +92,8 @@ class BaseLoader(BaseETLLogger):
             )
             result = cur.fetchone()
             run_id = result[0] if result else 0
-            conn.commit()
             self.logger.debug(f"ETL run started: {dag_id}.{task_id} [{execution_date}] - run_id={run_id}")
             return run_id
-        finally:
-            cur.close()
 
     def log_etl_end(
         self,
@@ -117,10 +113,7 @@ class BaseLoader(BaseETLLogger):
             status: 'success' or 'failed'
             error_message: Error message if status is 'failed'
         """
-        from datetime import datetime
-
-        cur = conn.cursor()
-        try:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE dwh.etl_run_log
@@ -134,10 +127,7 @@ class BaseLoader(BaseETLLogger):
                 """,
                 (datetime.now(), status, records_processed, error_message, datetime.now(), run_id),
             )
-            conn.commit()
             self.logger.debug(f"ETL run ended: run_id={run_id}, status={status}, records={records_processed}")
-        finally:
-            cur.close()
 
     def log_to_lake_metadata(
         self,
@@ -163,21 +153,93 @@ class BaseLoader(BaseETLLogger):
             conn: Active database connection
             status: 'success' or 'failed'
         """
-        cur = conn.cursor()
-        try:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO lake_metadata (
                     bucket_name, object_path, layer, data_source,
                     record_count, file_size_bytes, status
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (object_path) DO UPDATE SET
+                    record_count = EXCLUDED.record_count,
+                    file_size_bytes = EXCLUDED.file_size_bytes,
+                    status = EXCLUDED.status,
+                    load_timestamp = CURRENT_TIMESTAMP
                 """,
                 (bucket_name, object_path, layer, data_source, record_count, file_size_bytes, status),
             )
-            conn.commit()
             self.logger.debug(
                 f"Lake metadata logged: {layer}/{data_source} - {object_path} ({record_count} records)"
             )
-        finally:
-            cur.close()
+
+    def log_etl_metrics(
+        self,
+        etl_run_id: int,
+        execution_date: str,
+        target_table: str,
+        data_source: str,
+        rows_input: int,
+        rows_loaded: int,
+        rows_rejected: int,
+        conn: psycopg2.extensions.connection,
+        completeness_score: Optional[float] = None,
+        validity_score: Optional[float] = None,
+        uniqueness_score: Optional[float] = None,
+        freshness_score: Optional[float] = None,
+        overall_quality_score: Optional[float] = None,
+        quality_details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Persist data quality metrics to dwh.etl_metrics for Metabase dashboard.
+
+        Args:
+            etl_run_id: FK to etl_run_log.id
+            execution_date: Logical execution date (YYYY-MM-DD)
+            target_table: Destination table name (e.g. 'fct_weather_observation')
+            data_source: Origin identifier ('openweather', 'openmeteo', 'aemet')
+            rows_input: Rows read from Silver layer
+            rows_loaded: Rows inserted into Gold layer
+            rows_rejected: Rows rejected by validation or ON CONFLICT
+            conn: Active database connection
+            completeness_score: Non-null ratio (0.0-1.0)
+            validity_score: Passed expectations ratio (0.0-1.0)
+            uniqueness_score: Unique keys ratio (0.0-1.0)
+            freshness_score: Data recency score (0.0-1.0)
+            overall_quality_score: Weighted average of dimension scores
+            quality_details: Full quality report as JSON
+        """
+        with conn.cursor() as cur:
+            details_json = json.dumps(quality_details) if quality_details else None
+            cur.execute(
+                """
+                INSERT INTO dwh.etl_metrics (
+                    etl_run_id, execution_date, target_table, data_source,
+                    rows_input, rows_loaded, rows_rejected,
+                    completeness_score, validity_score, uniqueness_score,
+                    freshness_score, overall_quality_score, quality_details
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (etl_run_id, target_table) DO UPDATE SET
+                    rows_input = EXCLUDED.rows_input,
+                    rows_loaded = EXCLUDED.rows_loaded,
+                    rows_rejected = EXCLUDED.rows_rejected,
+                    completeness_score = EXCLUDED.completeness_score,
+                    validity_score = EXCLUDED.validity_score,
+                    uniqueness_score = EXCLUDED.uniqueness_score,
+                    freshness_score = EXCLUDED.freshness_score,
+                    overall_quality_score = EXCLUDED.overall_quality_score,
+                    quality_details = EXCLUDED.quality_details,
+                    measured_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    etl_run_id, execution_date, target_table, data_source,
+                    rows_input, rows_loaded, rows_rejected,
+                    completeness_score, validity_score, uniqueness_score,
+                    freshness_score, overall_quality_score, details_json,
+                ),
+            )
+            self.logger.debug(
+                f"ETL metrics logged: {target_table} [{execution_date}] "
+                f"input={rows_input} loaded={rows_loaded} rejected={rows_rejected} "
+                f"quality={overall_quality_score}"
+            )
 

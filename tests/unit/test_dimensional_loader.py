@@ -34,6 +34,7 @@ class TestLoadDimDate:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -43,7 +44,7 @@ class TestLoadDimDate:
 
         # Verify cursor was created and closed
         mock_conn.cursor.assert_called_once()
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
         # Verify execute was called (should be 4018 times for 2020-2030)
         assert mock_cursor.execute.call_count > 4000
@@ -54,6 +55,7 @@ class TestLoadDimDate:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -80,6 +82,7 @@ class TestLoadDimDate:
         mock_cursor = MagicMock()
         mock_cursor.execute.side_effect = Exception("Database error")
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -90,7 +93,7 @@ class TestLoadDimDate:
             loader.load_dim_date()
 
         # Verify cursor was closed even on error
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
 
 class TestLoadDimCity:
@@ -114,6 +117,7 @@ class TestLoadDimCity:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -128,7 +132,7 @@ class TestLoadDimCity:
         assert mock_cursor.execute.call_count == 2
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
     @patch("src.dimensional_loader.requests.get")
     @patch("src.dimensional_loader.DimensionalLoader.connection")
@@ -147,6 +151,7 @@ class TestLoadDimCity:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -157,7 +162,7 @@ class TestLoadDimCity:
             loader.load_dim_city()
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
     @patch("src.dimensional_loader.requests.get")
     @patch("src.dimensional_loader.DimensionalLoader.connection")
@@ -170,6 +175,7 @@ class TestLoadDimCity:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -180,7 +186,7 @@ class TestLoadDimCity:
             loader.load_dim_city()
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
 
 class TestLoadDimWeek:
@@ -192,6 +198,7 @@ class TestLoadDimWeek:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -204,7 +211,7 @@ class TestLoadDimWeek:
         assert "INSERT INTO dwh.dim_week" in mock_cursor.execute.call_args[0][0]
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
     @patch("src.dimensional_loader.DimensionalLoader.connection")
     def test_load_dim_week_handles_error(self, mock_connection):
@@ -213,6 +220,7 @@ class TestLoadDimWeek:
         mock_cursor = MagicMock()
         mock_cursor.execute.side_effect = Exception("Database error")
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -223,7 +231,7 @@ class TestLoadDimWeek:
             loader.load_dim_week()
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
 
 class TestLoadDimMonth:
@@ -235,6 +243,7 @@ class TestLoadDimMonth:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -247,7 +256,7 @@ class TestLoadDimMonth:
         assert "INSERT INTO dwh.dim_month" in mock_cursor.execute.call_args[0][0]
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
 
 class TestLoadDimAemetStations:
@@ -272,6 +281,7 @@ class TestLoadDimAemetStations:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.__exit__.return_value = None
         mock_connection.return_value = mock_conn
@@ -283,7 +293,7 @@ class TestLoadDimAemetStations:
         assert mock_cursor.execute.call_count == 2
 
         # Verify cursor was closed
-        mock_cursor.close.assert_called_once()
+        mock_cursor.__enter__.assert_called()
 
 
 class TestLoadAllDimensionalTables:
@@ -322,8 +332,18 @@ class TestLoadAllDimensionalTables:
         mock_severity.assert_called_once()
         mock_aemet.assert_called_once()
 
+    @patch.object(DimensionalLoader, "load_dim_aemet_stations")
+    @patch.object(DimensionalLoader, "load_dim_severity")
+    @patch.object(DimensionalLoader, "load_dim_layers")
+    @patch.object(DimensionalLoader, "load_dim_seasons")
+    @patch.object(DimensionalLoader, "load_dim_city")
+    @patch.object(DimensionalLoader, "load_dim_month")
+    @patch.object(DimensionalLoader, "load_dim_week")
     @patch.object(DimensionalLoader, "load_dim_date")
-    def test_load_all_dimensional_tables_accepts_context(self, mock_date):
+    def test_load_all_dimensional_tables_accepts_context(
+        self, mock_date, mock_week, mock_month, mock_city,
+        mock_seasons, mock_layers, mock_severity, mock_aemet
+    ):
         """Test that load_all_dimensional_tables accepts Airflow context."""
         loader = DimensionalLoader()
         context = {"ds": "2026-01-29", "task_instance": Mock()}
@@ -332,3 +352,6 @@ class TestLoadAllDimensionalTables:
         loader.load_all_dimensional_tables(**context)
 
         mock_date.assert_called_once()
+        mock_week.assert_called_once()
+        mock_month.assert_called_once()
+        mock_city.assert_called_once()
