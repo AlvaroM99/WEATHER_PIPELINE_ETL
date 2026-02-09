@@ -546,22 +546,18 @@ class Loader(BaseLoader):
         self, row: pd.Series, city_id: int, extraction_date_id: int
     ) -> RecordTuple:
         """Map an air quality row to a database record tuple."""
-
-        def g(k: str) -> Optional[Any]:
-            return row.get(k) if pd.notna(row.get(k)) else None
-
         return (
             city_id,
             pd.to_datetime(row.get("time")),
             extraction_date_id,
-            g("pm10"),
-            g("pm2_5"),
-            g("carbon_monoxide"),
-            g("nitrogen_dioxide"),
-            g("sulphur_dioxide"),
-            g("ozone"),
-            g("aerosol_optical_depth"),
-            g("dust"),
+            self.clean_value(row.get("pm10")),
+            self.clean_value(row.get("pm2_5")),
+            self.clean_value(row.get("carbon_monoxide")),
+            self.clean_value(row.get("nitrogen_dioxide")),
+            self.clean_value(row.get("sulphur_dioxide")),
+            self.clean_value(row.get("ozone")),
+            self.clean_value(row.get("aerosol_optical_depth")),
+            self.clean_value(row.get("dust")),
         )
 
     # ========================================================================
@@ -599,20 +595,16 @@ class Loader(BaseLoader):
 
     def _map_pollen(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a pollen row to a database record tuple."""
-
-        def g(k: str) -> Optional[Any]:
-            return row.get(k) if pd.notna(row.get(k)) else None
-
         return (
             city_id,
             pd.to_datetime(row.get("time")),
             extraction_date_id,
-            g("alder_pollen"),
-            g("birch_pollen"),
-            g("grass_pollen"),
-            g("mugwort_pollen"),
-            g("olive_pollen"),
-            g("ragweed_pollen"),
+            self.clean_value(row.get("alder_pollen")),
+            self.clean_value(row.get("birch_pollen")),
+            self.clean_value(row.get("grass_pollen")),
+            self.clean_value(row.get("mugwort_pollen")),
+            self.clean_value(row.get("olive_pollen")),
+            self.clean_value(row.get("ragweed_pollen")),
         )
 
     # ========================================================================
@@ -713,23 +705,24 @@ class Loader(BaseLoader):
     def _map_marine(self, row: pd.Series, city_id: int, extraction_date_id: int) -> RecordTuple:
         """Map a marine row to a database record tuple."""
 
-        def g(k: str) -> Optional[float]:
-            return float(row.get(k)) if pd.notna(row.get(k)) else None
+        def _clean_float(k: str) -> Optional[float]:
+            val = self.clean_value(row.get(k))
+            return float(val) if val is not None else None
 
         forecast_date_id: Optional[int] = self.get_date_id(row.get("time"))
         return (
             city_id,
             forecast_date_id,
             extraction_date_id,
-            g("wave_height_max"),
+            _clean_float("wave_height_max"),
             (
                 int(row.get("wave_direction_dominant"))
                 if pd.notna(row.get("wave_direction_dominant"))
                 else None
             ),
-            g("wave_period_max"),
-            g("wind_wave_height_max"),
-            g("swell_wave_height_max"),
+            _clean_float("wave_period_max"),
+            _clean_float("wind_wave_height_max"),
+            _clean_float("swell_wave_height_max"),
         )
 
     # ========================================================================

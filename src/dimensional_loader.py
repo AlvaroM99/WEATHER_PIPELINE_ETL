@@ -19,6 +19,7 @@ from src.base_loader import BaseLoader
 from src.config.apis.aemet_config import DEFAULT_STATIONS
 from src.type_aliases import AirflowContext
 from src.utils.city_utils import CITIES_CSV_URL
+from src.utils.http_utils import get_retrying_session
 
 
 class DimensionalLoader(BaseLoader):
@@ -32,8 +33,9 @@ class DimensionalLoader(BaseLoader):
     """
 
     def __init__(self) -> None:
-        """Initialize the DimensionalLoader with logger."""
+        """Initialize the DimensionalLoader with logger and HTTP session."""
         super().__init__()
+        self.session: requests.Session = get_retrying_session()
 
     def load_dim_date(self) -> None:
         """
@@ -103,7 +105,7 @@ class DimensionalLoader(BaseLoader):
                 try:
                     # Download CSV from GitHub
                     self.logger.info("Downloading cities CSV from GitHub...")
-                    response = requests.get(CITIES_CSV_URL, timeout=10)
+                    response = self.session.get(CITIES_CSV_URL, timeout=10)
                     response.raise_for_status()
 
                     # Parse CSV

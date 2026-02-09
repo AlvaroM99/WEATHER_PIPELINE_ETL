@@ -190,9 +190,9 @@ class SecretsManager:
         if not creds.database:
             missing.append("database")
         if missing:
-            logger.warning(
+            raise ValueError(
                 f"PostgreSQL credentials from {source} are incomplete: "
-                f"missing {', '.join(missing)}. Connection may fail."
+                f"missing {', '.join(missing)}."
             )
 
     def get_minio_credentials(self) -> MinioCredentials:
@@ -247,9 +247,9 @@ class SecretsManager:
         if not creds.secret_key:
             missing.append("secret_key")
         if missing:
-            logger.warning(
+            raise ValueError(
                 f"MinIO credentials from {source} are incomplete: "
-                f"missing {', '.join(missing)}. Connection may fail."
+                f"missing {', '.join(missing)}."
             )
 
     def get_openweather_api_key(self) -> Optional[str]:

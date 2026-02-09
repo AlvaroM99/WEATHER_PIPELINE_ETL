@@ -4,6 +4,7 @@ Tests end-to-end data flow from extraction to loading
 """
 
 import logging
+import threading
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
@@ -865,24 +866,19 @@ def test_configurable_metrics_weights():
 
 
 @pytest.mark.integration
-def test_secrets_manager_warns_on_missing_credentials(monkeypatch, caplog):
-    """Test that SecretsManager warns when credentials are incomplete"""
-    from src.config.secrets_manager import SecretsManager, _secrets_manager
+def test_secrets_manager_raises_on_missing_credentials(monkeypatch):
+    """Test that SecretsManager raises ValueError when credentials are incomplete"""
+    from src.config.secrets_manager import SecretsManager
 
     # Force non-Airflow mode and clear env vars
     monkeypatch.delenv("POSTGRES_USER", raising=False)
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     monkeypatch.setenv("POSTGRES_DB", "testdb")
 
-    with caplog.at_level(logging.WARNING):
-        manager = SecretsManager(use_airflow=False)
-        creds = manager.get_postgres_credentials()
+    manager = SecretsManager(use_airflow=False)
 
-    # Should have warned about missing user and password
-    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("incomplete" in msg.lower() or "missing" in msg.lower() for msg in warning_messages)
-    assert creds.user == ""
-    assert creds.password == ""
+    with pytest.raises(ValueError, match="incomplete"):
+        manager.get_postgres_credentials()
 
 
 @pytest.mark.integration
@@ -955,3 +951,100 @@ def test_find_parquet_files_returns_empty_on_error(mock_get_minio_client):
     result = loader._find_parquet_files("test-bucket", "data/")
 
     assert result == []
+
+
+# ===== Corrupted Parquet Tests =====
+
+
+@pytest.mark.integration
+@patch("src.loader.get_minio_client")
+@patch("src.loader.psycopg2.connect")
+def test_corrupted_parquet_handled_gracefully(
+    mock_connect, mock_get_minio_client, mock_db_connection
+):
+    """Test that corrupted parquet data from MinIO is handled gracefully."""
+    mock_minio_instance = Mock()
+    mock_minio_instance.read_parquet.side_effect = Exception(
+        "ArrowInvalid: Parquet magic bytes not found"
+    )
+    mock_get_minio_client.return_value = mock_minio_instance
+
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = (1,)
+    mock_cursor.fetchall.side_effect = [[("Madrid", 1)], [("28079", 1)]]
+    mock_db_connection.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_db_connection
+
+    from src.loader import Loader
+
+    loader = Loader()
+    result = loader.load_fact_observation(ds="2026-01-29")
+    assert result == 0
+
+
+# ===== Concurrency Tests =====
+
+
+@pytest.mark.integration
+@patch("src.loader.execute_values")
+@patch("src.loader.get_minio_client")
+@patch("src.base_loader.return_db_connection")
+@patch("src.base_loader.get_db_connection")
+def test_concurrent_loader_calls_no_race_condition(
+    mock_get_conn, mock_return_conn, mock_get_minio_client, mock_execute_values,
+):
+    """Two threads loading the same date should both complete without error."""
+    mock_minio_instance = Mock()
+
+    df = pd.DataFrame({
+        "city_name": ["Madrid"],
+        "time": ["2026-01-29"],
+        "temperature_2m_max": [18.5],
+        "temperature_2m_min": [8.3],
+    })
+
+    mock_obj = Mock()
+    mock_obj.object_name = "forecast/daily/2026-01-29/daily.parquet"
+    mock_minio_instance.client.list_objects.return_value = [mock_obj]
+    mock_minio_instance.read_parquet.return_value = df
+    mock_get_minio_client.return_value = mock_minio_instance
+
+    # Each thread gets its own mock connection to avoid shared-state issues
+    def make_mock_conn():
+        conn = MagicMock()
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.rowcount = 1
+        cursor.fetchone.return_value = (1,)
+        cursor.fetchall.return_value = [("Madrid", 1)]
+        conn.cursor.return_value = cursor
+        return conn
+
+    mock_get_conn.side_effect = lambda: make_mock_conn()
+
+    from src.loader import Loader
+
+    errors = []
+    results = []
+
+    def load_in_thread():
+        try:
+            loader = Loader()
+            r = loader.load_fact_forecast_daily(ds="2026-01-29")
+            results.append(r)
+        except Exception as e:
+            errors.append(e)
+
+    t1 = threading.Thread(target=load_in_thread)
+    t2 = threading.Thread(target=load_in_thread)
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert len(errors) == 0, f"Unexpected errors: {errors}"
+    assert len(results) == 2
+    assert all(r >= 0 for r in results)
+    # Both threads returned their connections to the pool
+    assert mock_return_conn.call_count >= 2

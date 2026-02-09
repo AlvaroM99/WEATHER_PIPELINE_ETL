@@ -176,8 +176,8 @@ class TestGetPostgresCredentials:
         assert creds.password == "env_pass"
 
     @patch("src.config.secrets_manager._is_airflow_context")
-    def test_get_postgres_defaults(self, mock_is_airflow, monkeypatch):
-        """Test Postgres credentials with default values."""
+    def test_get_postgres_defaults_raises_on_missing(self, mock_is_airflow, monkeypatch):
+        """Test Postgres credentials raise ValueError when user/password missing."""
         mock_is_airflow.return_value = False
 
         # Clear environment variables
@@ -185,13 +185,22 @@ class TestGetPostgresCredentials:
             monkeypatch.delenv(var, raising=False)
 
         manager = SecretsManager()
-        creds = manager.get_postgres_credentials()
 
-        assert creds.host == "postgres"
-        assert creds.port == 5432
-        assert creds.database == "weatherdb"
-        assert creds.user == ""
-        assert creds.password == ""
+        with pytest.raises(ValueError, match="incomplete"):
+            manager.get_postgres_credentials()
+
+    @patch("src.config.secrets_manager._is_airflow_context")
+    def test_get_minio_defaults_raises_on_missing(self, mock_is_airflow, monkeypatch):
+        """Test MinIO credentials raise ValueError when access_key/secret_key missing."""
+        mock_is_airflow.return_value = False
+
+        for var in ["MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD", "MINIO_ENDPOINT"]:
+            monkeypatch.delenv(var, raising=False)
+
+        manager = SecretsManager()
+
+        with pytest.raises(ValueError, match="incomplete"):
+            manager.get_minio_credentials()
 
 
 class TestGetMinioCredentials:
