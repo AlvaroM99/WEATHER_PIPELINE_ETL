@@ -405,9 +405,9 @@ main "$@"
 
 ### Proyecto
 
-- [CD_GUIDE.md](../CD_GUIDE.md) - Guía completa de CD
-- [SETUP_CD.md](../SETUP_CD.md) - Setup rápido
-- [CD_SUMMARY.md](../CD_SUMMARY.md) - Resumen ejecutivo
+- [CD_GUIDE.md](../docs/deployment/CD_GUIDE.md) - Guía completa de CD
+- [SETUP_CD.md](../docs/deployment/SETUP_CD.md) - Setup rápido
+- [CD_SUMMARY.md](../docs/deployment/CD_SUMMARY.md) - Resumen ejecutivo
 
 ---
 

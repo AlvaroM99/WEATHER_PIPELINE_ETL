@@ -439,10 +439,10 @@ ssh deploy@<server>
 tail -f /opt/weather-etl/logs/deploy.log
 
 # Ver logs de Airflow
-docker-compose -f docker-compose.<env>.yml logs -f airflow
+docker-compose -f docker/compose/docker-compose.<env>.yml logs -f airflow
 
 # Ver estado de servicios
-docker-compose -f docker-compose.<env>.yml ps
+docker-compose -f docker/compose/docker-compose.<env>.yml ps
 ```
 
 **Slack Notifications** (si configurado):
@@ -522,17 +522,17 @@ bash scripts/smoke_tests.sh
 tail -f /opt/weather-etl/logs/deploy.log
 
 # Docker logs
-docker-compose -f docker-compose.<env>.yml logs -f
+docker-compose -f docker/compose/docker-compose.<env>.yml logs -f
 ```
 
 **Ver Logs Estructurados (Production)**:
 
 ```bash
 # Logs JSON de Airflow
-docker-compose -f docker-compose.production.yml logs airflow | grep '"level":"ERROR"'
+docker-compose -f docker/compose/docker-compose.production.yml logs airflow | grep '"level":"ERROR"'
 
 # Con jq para filtrar
-docker-compose -f docker-compose.production.yml logs airflow \
+docker-compose -f docker/compose/docker-compose.production.yml logs airflow \
   | jq 'select(.level=="ERROR" and .logger=="Extractor")'
 ```
 
@@ -581,7 +581,7 @@ docker ps | grep airflow
 docker logs weather-etl-airflow-1
 
 # Reiniciar si es necesario
-docker-compose -f docker-compose.<env>.yml restart airflow
+docker-compose -f docker/compose/docker-compose.<env>.yml restart airflow
 ```
 
 #### 2. Database Connection Timeout
@@ -603,7 +603,7 @@ nano .env.<environment>
 # DB_POOL_MAX_CONN=100  # Aumentar
 
 # Reiniciar
-docker-compose -f docker-compose.<env>.yml restart
+docker-compose -f docker/compose/docker-compose.<env>.yml restart
 ```
 
 #### 3. Image Pull Fails
@@ -695,13 +695,13 @@ cp "$BACKUP_DIR/.env.production.backup" .env.production
 
 # Restaurar database (si necesario)
 gunzip < "$BACKUP_DIR/database_backup.sql.gz" | \
-  docker-compose -f docker-compose.production.yml exec -T postgres \
+  docker-compose -f docker/compose/docker-compose.production.yml exec -T postgres \
   psql -U weather_user_prod weather_db_prod
 
 # Reiniciar servicios con versión anterior
-docker-compose -f docker-compose.production.yml down
+docker-compose -f docker/compose/docker-compose.production.yml down
 docker tag weather-pipeline-etl:production-previous weather-pipeline-etl:production
-docker-compose -f docker-compose.production.yml up -d
+docker-compose -f docker/compose/docker-compose.production.yml up -d
 ```
 
 ### Verificar Rollback
@@ -763,11 +763,11 @@ BACKUP_DIR="/opt/weather-etl/backups/$(date +\%Y\%m\%d)"
 mkdir -p "$BACKUP_DIR"
 
 # Backup database
-docker-compose -f /opt/weather-etl/docker-compose.production.yml exec -T postgres \
+docker-compose -f /opt/weather-etl/docker/compose/docker-compose.production.yml exec -T postgres \
   pg_dump -U weather_user_prod weather_db_prod | gzip > "$BACKUP_DIR/database.sql.gz"
 
 # Backup MinIO
-docker-compose -f /opt/weather-etl/docker-compose.production.yml exec -T minio \
+docker-compose -f /opt/weather-etl/docker/compose/docker-compose.production.yml exec -T minio \
   mc mirror --quiet /data "$BACKUP_DIR/minio"
 
 # Cleanup old backups (>30 days)

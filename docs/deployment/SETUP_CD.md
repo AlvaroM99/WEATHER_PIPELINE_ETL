@@ -195,7 +195,7 @@ bash scripts/health_check.sh
 docker build -t weather-pipeline-etl:development .
 
 # Iniciar servicios
-docker-compose -f docker-compose.development.yml up -d
+docker-compose -f docker/compose/docker-compose.development.yml up -d
 
 # Esperar 60 segundos
 sleep 60
@@ -346,11 +346,11 @@ docker pull ghcr.io/alvarom99/weather-pipeline-etl:development
 ssh deploy@dev.weather-etl.com
 cd /opt/weather-etl
 
-docker-compose -f docker-compose.development.yml logs airflow
-docker-compose -f docker-compose.development.yml logs postgres
+docker-compose -f docker/compose/docker-compose.development.yml logs airflow
+docker-compose -f docker/compose/docker-compose.development.yml logs postgres
 
 # Restart servicios
-docker-compose -f docker-compose.development.yml restart
+docker-compose -f docker/compose/docker-compose.development.yml restart
 
 # Esperar 60s y reintentar
 sleep 60

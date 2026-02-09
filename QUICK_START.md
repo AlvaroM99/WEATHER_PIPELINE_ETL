@@ -16,8 +16,8 @@ ENVIRONMENT=development
 ### 2. Reiniciar Servicios (30 segundos)
 
 ```bash
-docker-compose restart airflow-worker
-docker-compose restart airflow-scheduler
+docker-compose -f docker/compose/docker-compose.yml restart airflow-worker
+docker-compose -f docker/compose/docker-compose.yml restart airflow-scheduler
 ```
 
 ✅ **¡Listo!** El pool de conexiones ya usa maxconn=20.
@@ -141,7 +141,7 @@ print(f"Pool: {stats['min_conn']}-{stats['max_conn']} connections")
 
 ```bash
 # Verificar logs de Airflow
-docker-compose logs airflow-worker | grep "connection pool created"
+docker-compose -f docker/compose/docker-compose.yml logs airflow-worker | grep "connection pool created"
 
 # Debería mostrar:
 # Database connection pool created (minconn=2, maxconn=20)
@@ -151,7 +151,7 @@ docker-compose logs airflow-worker | grep "connection pool created"
 
 ```bash
 # Verificar logs JSON
-docker-compose logs airflow-worker | grep -o '"timestamp"'
+docker-compose -f docker/compose/docker-compose.yml logs airflow-worker | grep -o '"timestamp"'
 
 # Si hay output, logging JSON está activo
 ```
@@ -189,7 +189,7 @@ echo "DB_POOL_MIN_CONN=2" >> .env
 echo "DB_POOL_MAX_CONN=20" >> .env
 
 # Reiniciar servicios
-docker-compose restart
+docker-compose -f docker/compose/docker-compose.yml restart
 ```
 
 ### Problema: Import error de structured_logger

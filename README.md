@@ -263,7 +263,7 @@ WEATHER_PIPELINE_ETL/
 │   ├── transformer.py          # Transformation Logic
 │   └── loader.py               # Loading Logic
 ├── tests/                      # Pytest Suite
-├── .env.example                # Template for Environment Variables
+├── config/                     # Environment configuration templates
 ├── docker-compose.yml          # Services Orchestration
 └── pyproject.toml              # Python Dependencies & Tool Config
 ```
@@ -299,7 +299,7 @@ Clone the repository and secure your environment:
 ```bash
 git clone https://github.com/AlvaroM99/WEATHER_PIPELINE_ETL.git
 cd WEATHER_PIPELINE_ETL
-cp .env.example .env
+cp config/.env.example .env
 # Edit .env with your API Keys
 ```
 

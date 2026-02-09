@@ -241,6 +241,10 @@ ignore = [
 [tool.ruff.lint.mccabe]
 max-complexity = 15
 
+# Per-file ignores are intentional for specific code patterns:
+# - F401: Unused imports in __init__.py files (re-exports)
+# - F841: Unused variables in ETL modules (intermediate transformations)
+# - E722: Bare except in transformer (legacy error handling)
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/*" = ["S101", "B011", "F401", "F811", "F841", "E722"]

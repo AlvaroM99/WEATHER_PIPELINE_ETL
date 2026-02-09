@@ -14,8 +14,8 @@ Se ha implementado un **sistema completo de Continuous Deployment (CD)** para el
 |---------|-------------|--------|
 | [`Dockerfile`](Dockerfile) | Multi-stage build optimizado | 82 |
 | [`.dockerignore`](.dockerignore) | Exclusiones del build context | 71 |
-| [`docker-compose.development.yml`](docker-compose.development.yml) | Config para dev | 133 |
-| [`docker-compose.production.yml`](docker-compose.production.yml) | Config para prod | 210 |
+| [`docker-compose.development.yml`](../../docker/compose/docker-compose.development.yml) | Config para dev | 133 |
+| [`docker-compose.production.yml`](../../docker/compose/docker-compose.production.yml) | Config para prod | 210 |
 
 ### Scripts de Deployment
 
@@ -40,7 +40,7 @@ Se ha implementado un **sistema completo de Continuous Deployment (CD)** para el
 |---------|-------------|
 | [`.env.development`](.env.development) | Variables de desarrollo |
 | [`.env.production`](.env.production) | Variables de producción |
-| [`.env.example`](.env.example) | Template actualizado con CD vars |
+| [`.env.example`](../../config/.env.example) | Template actualizado con CD vars |
 
 ### Documentación
 
