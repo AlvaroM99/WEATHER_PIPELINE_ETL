@@ -1,0 +1,143 @@
+name: CD - Development
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+env:
+  ENVIRONMENT: development
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: http://dev.weather-etl.example.com:8080
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          echo "image_tag=development" >> $GITHUB_OUTPUT
+          echo "deploy_time=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+          echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Configure SSH
+        if: ${{ secrets.DEV_SSH_PRIVATE_KEY != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEV_SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Development Server
+        if: ${{ secrets.DEV_SSH_PRIVATE_KEY != '' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER_HOST }} << 'EOF'
+            set -e
+
+            echo "🚀 Starting deployment to development..."
+
+            # Navigate to project directory
+            cd /opt/weather-etl
+
+            # Pull latest code
+            git fetch origin
+            git checkout develop
+            git pull origin develop
+
+            # Pull latest Docker image
+            echo "📦 Pulling Docker images..."
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}
+
+            # Tag for local use
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }} weather-pipeline-etl:development
+
+            # Run deployment script
+            echo "🔧 Running deployment..."
+            bash scripts/deploy.sh development ${{ steps.vars.outputs.image_tag }}
+
+            echo "✅ Deployment to development completed!"
+          EOF
+
+      - name: Deploy Locally (Fallback)
+        if: ${{ secrets.DEV_SSH_PRIVATE_KEY == '' }}
+        run: |
+          echo "⚠️  No SSH key configured, simulating local deployment"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}"
+          echo "This job would deploy to: ${{ secrets.DEV_SERVER_HOST }}"
+
+      - name: Health Check
+        run: |
+          echo "🏥 Running health checks..."
+          sleep 30  # Wait for services to start
+
+          # Health check URL (adjust based on your setup)
+          HEALTH_URL="http://${{ secrets.DEV_SERVER_HOST || 'localhost' }}:8080/health"
+
+          MAX_RETRIES=10
+          RETRY=0
+
+          while [ $RETRY -lt $MAX_RETRIES ]; do
+            if curl -f -s "$HEALTH_URL" > /dev/null 2>&1; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            RETRY=$((RETRY + 1))
+            echo "⏳ Health check attempt $RETRY/$MAX_RETRIES failed, retrying..."
+            sleep 10
+          done
+
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Run Smoke Tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # Smoke tests (adjust based on your setup)
+          if [ -f "scripts/smoke_tests.sh" ]; then
+            bash scripts/smoke_tests.sh
+          else
+            echo "⚠️  No smoke tests found, skipping"
+          fi
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "### Deployment Summary - Development 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** development" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ steps.vars.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed at:** ${{ steps.vars.outputs.deploy_time }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on Slack (optional)
+        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Development Deployment ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Development Deployment ${{ job.status }}*\n\n*Environment:* development\n*Image:* `${{ steps.vars.outputs.image_tag }}`\n*Commit:* `${{ steps.vars.outputs.short_sha }}`\n*Deployed by:* @${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
