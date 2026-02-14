@@ -10,10 +10,6 @@ __pycache__/
 !config/.env.development
 !config/.env.production
 
-# Docker
-
-
-
 # Docker volumes
 postgres_data/
 airflow_logs/
@@ -21,7 +17,6 @@ airflow_logs/
 # IDE
 .vscode/
 .idea/
-.claude/
 *.swp
 *.swo
 *~
@@ -52,10 +47,6 @@ tests/htmlcov/
 # Test and type checking caches
 .pytest_cache/
 .mypy_cache/
-
-# Windows artifacts
-nul
-coverage.json
 
 # Development and Documentation
 Makefile
