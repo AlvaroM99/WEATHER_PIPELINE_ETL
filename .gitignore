@@ -56,3 +56,10 @@ tests/htmlcov/
 # Windows artifacts
 nul
 coverage.json
+
+# Development and Documentation
+Makefile
+QUICK_START.md
+docker-compose.production.yml
+docker-compose.development.yml
+docs/
