@@ -63,3 +63,6 @@ QUICK_START.md
 docker-compose.production.yml
 docker-compose.development.yml
 docs/
+config/
+plugins/
+requirements/
