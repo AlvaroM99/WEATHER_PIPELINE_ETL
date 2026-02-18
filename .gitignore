@@ -54,6 +54,8 @@ QUICK_START.md
 docker-compose.production.yml
 docker-compose.development.yml
 docs/
-config/
-plugins/
-requirements/
+
+# Note: config/, plugins/, and requirements/ are now tracked
+# Only ignore sensitive config files
+config/.env.local
+config/.env.*.local

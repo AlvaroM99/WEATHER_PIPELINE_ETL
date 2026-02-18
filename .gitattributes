@@ -1,0 +1,14 @@
+# Force LF line endings for shell scripts and SQL files
+# This ensures compatibility with Docker Linux containers
+*.sh text eol=lf
+*.sql text eol=lf
+
+# Python files
+*.py text eol=lf
+
+# YAML files
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Default behavior: let Git handle line endings automatically
+* text=auto
